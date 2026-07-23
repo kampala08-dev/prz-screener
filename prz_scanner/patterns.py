@@ -17,20 +17,28 @@ every deliberate deviation from the Pine port:
      of the anchor joins the zone; the cluster count feeds accuracy.
   4. Explicit structure guards (B strictly inside XA; C inside AB..A for
      retracement patterns / beyond A for Shark).
-  5. Shark's extension leg (bc/ab) bounded to the book's 1.13-1.618 (with
-     the same tolerance widening as every other ratio check), and its BC
-     gate accepts any overlap of the 1.618-2.24 projection band with the
-     0.886-1.13 completion zone. The B-retracement filter 0.382-0.618 on
-     Shark is a [PINE] carry-over quality filter, not a book ratio.
+  5. Shark's Extreme Harmonic Impulse leg (bcp = bc/ab) bounded to the
+     book's 1.618-2.24 (V3 p.118/120/129: "must be at least a 1.618, can be
+     as much as 2.24"). The completion zone is the two-sided 0.886-1.13 of
+     the 0X leg. The B-retracement filter 0.382-0.618 on Shark is an
+     official Vol.3 element (p.119).
+
+[BOOK-V3] refinements verified against "Harmonic Trading Volume 3:
+Reaction vs. Reversal" (page refs = printed page numbers):
+  - B-point tolerances are ABSOLUTE percentage points (p.91): +/-3pp for
+    Gartley & Butterfly, 5pp for Bat/Crab/Shark ranges (see _B_SPEC).
+  - AB=CD alternates per the "AB=CD Type" element (see _ABCD_MULTS).
+  - Make-or-break stops per the "Stop Loss" element (see _STOP_XA).
+  - Shark TPs: 50%/61.8% retracement of the final leg (p.118).
 
 Book ratio table implemented (D anchor as multiple of XA; bull direction):
-  Gartley   B=0.618  C=0.382-0.886  BC proj 1.13-1.618   D=0.786  AB=CD
-  Bat       B=0.382-0.50            BC proj 1.618-2.618  D=0.886  AB=CD/1.27
-  Butterfly B=0.786                 BC proj 1.618-2.24   D=1.27   AB=CD/1.27
-  Crab      B=0.382-0.618           BC proj 2.618-3.618  D=1.618  1.27/1.618
-  Shark     ext leg 1.13-1.618 of AB; completion zone 0.886-1.13 of XA,
-            BC proj 1.618-2.24 (per the book's 0-X-A-B-C labelling our
-            X,A,B,C,D correspond to the book's 0,X,A,B,C).
+  Gartley   B=0.618+/-3pp  C=0.382-0.886  BC 1.13-1.618   D=0.786   SL>1.0XA
+  Bat       B=0.382-0.50   C=0.382-0.886  BC 1.618-2.618  D=0.886   SL>1.13XA
+  Butterfly B=0.786+/-3pp  C=0.382-0.886  BC 1.618-2.24   D=1.27    SL>1.414XA
+  Crab      B=0.382-0.618  C=0.382-0.886  BC 2.618-3.618  D=1.618   SL>2.0XA
+  Shark     impulse leg (BC/AB) 1.618-2.24; completion zone 0.886-1.13 of
+            XA; B (book 0X-ret at A) 0.382-0.618 (per the book's 0-X-A-B-C
+            labelling our X,A,B,C,D = book 0,X,A,B,C).
 
 [DEVIATION] additions (no Pine equivalent), clearly separated:
   - numeric `score` (fidelity/confluence/strictness/sweet-spot)
@@ -95,6 +103,9 @@ class Detection:
     # [BOOK] implied BC projection (CD/BC) & confluence element count
     bc_proj: float = 0.0
     conf_n: int = 1
+    # earliest bar the XABC window was live-knowable (backtest confirmation;
+    # -1 when the zigzag was built without with_confirm)
+    confirm_bar: int = -1
     # validity (przStatus): 0 active, 1 confirmed-reversal, 2 invalid, 3 flip
     status: int = 0
     first_touch_idx: int = -1
@@ -207,19 +218,44 @@ def _score(det: Detection, ideal_b: float, ideal_c: float, k_used: float,
 
 
 def _targets(det: Detection) -> None:
-    """[DEVIATION] Fib-based TP/SL off the XA leg from D (PRZ mid)."""
+    """TP/SL levels.
+
+    Stop  [BOOK-V3]: the pattern's make-or-break XA multiple beyond A
+          (see _STOP_XA), plus a small buffer for the "> level" wording.
+    TPs   Shark [BOOK-V3 p.118]: initial objective = 50% retracement of
+          the final (CD) leg, secondary 61.8%, full retest of C third —
+          "anticipate a reaction to the 50-61.8%" (the 5-0 PRZ test).
+          The book's full rule is "the LESSER OF the 50% level or the
+          Reciprocal AB=CD"; the reciprocal needs the post-completion
+          counter-move, which does not exist at detection time, so the
+          50% book minimum is used.
+          Other patterns [DEVIATION]: fib multiples of XA from D.
+    """
     xa = abs(det.aP - det.xP)
     d = det.prz_mid
+    k_stop = _STOP_XA.get(det.pattern, 1.0) + _STOP_BUFFER
     if det.bull:
-        det.tp1 = d + 0.382 * xa
-        det.tp2 = d + 0.618 * xa
-        det.tp3 = d + 1.000 * xa
-        det.stop = det.prz_lo - 0.10 * xa
+        det.stop = det.aP - k_stop * xa
+        if det.pattern == "Shark":
+            leg = det.cP - d
+            det.tp1 = d + 0.500 * leg
+            det.tp2 = d + 0.618 * leg
+            det.tp3 = det.cP
+        else:
+            det.tp1 = d + 0.382 * xa
+            det.tp2 = d + 0.618 * xa
+            det.tp3 = d + 1.000 * xa
     else:
-        det.tp1 = d - 0.382 * xa
-        det.tp2 = d - 0.618 * xa
-        det.tp3 = d - 1.000 * xa
-        det.stop = det.prz_hi + 0.10 * xa
+        det.stop = det.aP + k_stop * xa
+        if det.pattern == "Shark":
+            leg = d - det.cP
+            det.tp1 = d - 0.500 * leg
+            det.tp2 = d - 0.618 * leg
+            det.tp3 = det.cP
+        else:
+            det.tp1 = d - 0.382 * xa
+            det.tp2 = d - 0.618 * xa
+            det.tp3 = d - 1.000 * xa
 
 
 # ---------------------------------------------------------------------------
@@ -239,14 +275,59 @@ _BC_LEVELS = {
     "Shark":     (1.618, 2.0, 2.24),
 }
 
-# Book AB=CD completion multiples per pattern (1.0 = classic AB=CD;
-# alternates per Carney: Bat/Butterfly 1.27, Crab 1.27 & 1.618).
+# [BOOK-V3] AB=CD completion multiples per pattern, from the "AB=CD Type"
+# element of each pattern spec in Harmonic Trading Vol.3:
+#   Gartley  "AB=CD - 1.27AB=CD"   (V3 p.92)
+#   Bat      "AB=CD - 1.618AB=CD"  (V3 p.98)
+#   Butterfly"AB=CD - 1.27AB=CD"   (V3 p.113)
+#   Crab     "AB=CD - 1.618AB=CD"  (V3 p.104)
 _ABCD_MULTS = {
-    "Gartley":   (1.0,),
-    "Bat":       (1.0, 1.27),
+    "Gartley":   (1.0, 1.27),
+    "Bat":       (1.0, 1.27, 1.618),
     "Butterfly": (1.0, 1.27),
-    "Crab":      (1.27, 1.618),
+    "Crab":      (1.0, 1.27, 1.618),
 }
+
+# [BOOK-V3] B-point specs (V3 p.91 "B Point Tolerance Classification"):
+# tolerances are ABSOLUTE percentage points of the XA retracement, not
+# relative percentages. Gartley & Butterfly demand +/-3pp around a precise
+# ideal; Bat & Crab (and Shark's 0X-retracement measure, V3 p.119) use 5pp
+# on their ranges. The book calls these MAXIMUM tolerances ("become invalid
+# above the upper limit", p.91) — hard boundaries, so the loose pass does
+# NOT widen them (it only loosens the C-range and BC-gate relative checks).
+#   ("point", ideal, pp)  |  ("range", lo, hi, pp)
+_B_SPEC = {
+    "Gartley":   ("point", 0.618, 0.03),
+    "Butterfly": ("point", 0.786, 0.03),
+    "Bat":       ("range", 0.382, 0.50, 0.05),
+    "Crab":      ("range", 0.382, 0.618, 0.05),
+    "Shark":     ("range", 0.382, 0.618, 0.05),
+}
+
+
+def _b_ok(name: str, br: float, is_strict: bool) -> bool:
+    """[BOOK-V3] B-point check with absolute-pp tolerance (hard limits —
+    identical on strict and loose passes per p.91)."""
+    del is_strict  # book: maximum tolerance, never widened
+    spec = _B_SPEC[name]
+    if spec[0] == "point":
+        _, ideal, pp = spec
+        return abs(br - ideal) <= pp
+    _, lo, hi, pp = spec
+    return lo - pp <= br <= hi + pp
+
+
+# [BOOK-V3] make-or-break stop-loss levels, as XA multiples beyond A, from
+# the "Stop Loss" element of each pattern spec (Shark: just beyond the 1.13
+# edge of its completion zone):
+_STOP_XA = {
+    "Gartley":   1.0,     # V3 p.92  "Stop Loss > 1.0"
+    "Bat":       1.13,    # V3 p.98  "Stop Loss > 1.13X"
+    "Butterfly": 1.414,   # V3 p.113 "Stop Loss > 1.414XA"
+    "Crab":      2.0,     # V3 p.104 "Stop Loss > 2.0XA"
+    "Shark":     1.13,
+}
+_STOP_BUFFER = 0.02      # small XA fraction beyond the book level ("> X")
 
 # Book BC-projection gate ranges (min, max) for the implied m = CD/BC.
 _BC_GATE = {
@@ -264,23 +345,40 @@ _BC_GATE = {
 # ---------------------------------------------------------------------------
 def scan_points(ticker: str, points: List[ZPoint],
                 high: np.ndarray, low: np.ndarray, close: np.ndarray,
-                tol_val: float, is_strict: bool, cfg) -> List[Detection]:
+                tol_val: float, is_strict: bool, cfg,
+                all_windows: bool = False) -> List[Detection]:
+    """Scan pivot windows for harmonic patterns.
+
+    all_windows=False (live): only the 4 most recent XABC windows are
+    scanned (Pine behaviour — patterns near the right edge).
+    all_windows=True (backtest): every consecutive alternating pivot
+    quadruple in the list is scanned, so historical patterns that were
+    once "the last 4 pivots" are also found.
+    """
     dets: List[Detection] = []
     total = len(points)
     if total < 5:
         return dets
 
     last_close = close[-1]
-    max_w = min(3, total - 4)   # Pine: maxW = min(3, totalP-4)
+    if all_windows:
+        idx_range = range(0, total - 3)
+    else:
+        max_w = min(3, total - 4)   # Pine: maxW = min(3, totalP-4)
+        idx_range = [total - 4 - w for w in range(0, max_w + 1)]
 
-    for w in range(0, max_w + 1):
-        idx = total - 4 - w
+    for idx in idx_range:
         if idx < 0:
             continue
-        xP, xi, x_hi = points[idx]
-        aP, ai, _ = points[idx + 1]
-        bP, bi, _ = points[idx + 2]
-        cP, ci, _ = points[idx + 3]
+        # index access (points may be 3- or 4-tuples; see zigzag with_confirm)
+        win = (points[idx], points[idx + 1], points[idx + 2], points[idx + 3])
+        xP, xi, x_hi = win[0][0], win[0][1], win[0][2]
+        aP, ai = win[1][0], win[1][1]
+        bP, bi = win[2][0], win[2][1]
+        cP, ci = win[3][0], win[3][1]
+        # earliest bar the whole XABC window was live-knowable (raw pivot
+        # bars when provided; falls back to the pivot bars themselves)
+        confirm_bar = max(p[3] if len(p) > 3 else p[1] for p in win)
         bull = not x_hi
 
         # alternation check (Pine a1,a2,a3)
@@ -324,22 +422,14 @@ def scan_points(ticker: str, points: List[ZPoint],
 
             g_lo, g_hi = _BC_GATE[name]
             if two_sided:
-                # [BOOK] Shark: completion zone is already the confluence of
-                # the 0.886 and 1.13 levels of XA (book's 0X). Count them,
-                # plus the BC projection if it lands inside the zone.
+                # [BOOK] Shark: the Extreme Harmonic Impulse (bcp = BC/AB,
+                # gated 1.618-2.24 by the caller) and the 0X-retracement B
+                # point already define the pattern; the completion zone is
+                # the 0.886-1.13 confluence of the 0X leg (= code XA). No
+                # extra BC-projection reject here — that would double-count
+                # the impulse leg the caller already gated.
                 conf_n = 2
                 d_ref = (prz_hi + prz_lo) / 2
-                # [BOOK] two-sided gate: the pattern is valid when the BC
-                # projection band (1.618-2.24 of BC from C) OVERLAPS the
-                # completion zone anywhere — not just at its midpoint.
-                lo_t = g_lo * (1 - tol_val / 100)
-                hi_t = g_hi * (1 + tol_val / 100)
-                if bull:
-                    band_lo, band_hi = cP - hi_t * bc, cP - lo_t * bc
-                else:
-                    band_lo, band_hi = cP + lo_t * bc, cP + hi_t * bc
-                if sbc and not (band_lo <= prz_hi and band_hi >= prz_lo):
-                    return
                 m_implied = safe_div(abs(cP - d_ref), bc)  # informational
             else:
                 d_ref = d_anchor
@@ -391,7 +481,7 @@ def scan_points(ticker: str, points: List[ZPoint],
                 depth=0, is_strict=is_strict,
                 xi=xi, xP=xP, ai=ai, aP=aP, bi=bi, bP=bP, ci=ci, cP=cP,
                 prz_hi=prz_hi_, prz_lo=prz_lo_, br=br, cr=cr, bcp=bcp,
-                bc_proj=m_implied, conf_n=conf_n,
+                bc_proj=m_implied, conf_n=conf_n, confirm_bar=confirm_bar,
                 status=status, first_touch_idx=ft, end_idx=ei,
             )
             det.dist_pct = (last_close - mid) / mid * 100
@@ -400,38 +490,46 @@ def scan_points(ticker: str, points: List[ZPoint],
             _targets(det)
             dets.append(det)
 
-        # ---- GARTLEY [BOOK]: B=0.618, C=0.382-0.886, D=0.786 XA ----
-        if pe["Gartley"] and c_retr_ok and in_r(br, 0.618, tol_val) and \
+        # ---- GARTLEY [BOOK-V3 p.92]: B=0.618 +/-3pp, D=0.786 XA ----
+        if pe["Gartley"] and c_retr_ok and _b_ok("Gartley", br, is_strict) and \
                 in_mm(cr, 0.382, 0.886, tol_val):
             gd = aP - 0.786 * xa if bull else aP + 0.786 * xa
             emit("Gartley", "green", gd, xa * 0.03, 0.618, 0.618, 0.786)
 
-        # ---- BAT [BOOK]: B=0.382-0.50 (ideal 0.50), D=0.886 XA ----
-        if pe["Bat"] and c_retr_ok and in_mm(br, 0.382, 0.50, tol_val) and \
+        # ---- BAT [BOOK-V3 p.98]: B=0.382-0.50 (+5pp tol), D=0.886 XA ----
+        if pe["Bat"] and c_retr_ok and _b_ok("Bat", br, is_strict) and \
                 in_mm(cr, 0.382, 0.886, tol_val):
             bd = aP - 0.886 * xa if bull else aP + 0.886 * xa
             emit("Bat", "blue", bd, xa * 0.03, 0.50, 0.618, 0.886)
 
-        # ---- BUTTERFLY [BOOK]: B=0.786, D=1.27 XA ----
-        if pe["Butterfly"] and c_retr_ok and in_r(br, 0.786, tol_val) and \
-                in_mm(cr, 0.382, 0.886, tol_val):
+        # ---- BUTTERFLY [BOOK-V3 p.113]: B=0.786 +/-3pp, D=1.27 XA ----
+        if pe["Butterfly"] and c_retr_ok and _b_ok("Butterfly", br, is_strict) \
+                and in_mm(cr, 0.382, 0.886, tol_val):
             fd = aP - 1.27 * xa if bull else aP + 1.27 * xa
             emit("Butterfly", "purple", fd, xa * 0.04, 0.786, 0.618, 1.27)
 
-        # ---- CRAB [BOOK]: B=0.382-0.618 (ideal 0.618), D=1.618 XA ----
-        if pe["Crab"] and c_retr_ok and in_mm(br, 0.382, 0.618, tol_val) and \
+        # ---- CRAB [BOOK-V3 p.104]: B=0.382-0.618 (+5pp), D=1.618 XA ----
+        if pe["Crab"] and c_retr_ok and _b_ok("Crab", br, is_strict) and \
                 in_mm(cr, 0.382, 0.886, tol_val):
             cd = aP - 1.618 * xa if bull else aP + 1.618 * xa
             emit("Crab", "orange", cd, xa * 0.05, 0.618, 0.618, 1.618)
 
-        # ---- SHARK [BOOK]: ext leg 1.13-1.618 of AB,               ----
-        # ---- completion zone 0.886-1.13 of XA (two-sided)          ----
-        # NOTE: the B-retracement filter 0.382-0.618 is a [PINE] quality
-        # filter carried over from the port — Carney's Shark leaves this
-        # leg unconstrained. Kept deliberately to suppress degenerate
-        # geometries; it is NOT a book ratio.
-        if pe["Shark"] and c_ext_ok and in_mm(br, 0.382, 0.618, tol_val) and \
-                in_mm(bcp, 1.13, 1.618, tol_val):
+        # ---- SHARK [BOOK-V3]: Extreme Harmonic Impulse leg 1.618-2.24,  ----
+        # ---- completion zone 0.886-1.13 of XA (two-sided)              ----
+        # bcp = BC/AB is the "extended AB Extreme Harmonic Impulse Wave"
+        # which the book requires to be "at least 1.618 (can be as much as
+        # 2.24)" — V3 p.118/120/129, stated three times. (The old Pine port
+        # used 1.13-1.618, which is BELOW the book minimum — corrected here.)
+        # The 0.382-0.618 B filter is an OFFICIAL V3 element (p.119:
+        # "an additional measure at the 0X retracement of a 38.2-61.8%
+        # at the A point ... does help to differentiate Shark structures").
+        # NOTE anchor leg: V3's prose is internally inconsistent about the
+        # completion zone's reference leg ("0B" pp.121/125/129 vs "XA/0X"
+        # pp.120/125 vs "0C" p.127). We follow the classic published spec
+        # (Vol.2 / Harmonic Analyzer): 0.886-1.13 of the initial 0X leg
+        # (= code XA), which V3's own "1.0 XA level" wording also supports.
+        if pe["Shark"] and c_ext_ok and _b_ok("Shark", br, is_strict) and \
+                in_mm(bcp, 1.618, 2.24, tol_val):
             su = aP - 0.886 * xa if bull else aP + 0.886 * xa
             sl2 = aP - 1.13 * xa if bull else aP + 1.13 * xa
             shi = max(su, sl2); slo = min(su, sl2)

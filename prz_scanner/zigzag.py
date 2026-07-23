@@ -59,7 +59,8 @@ def _pivot_low(low: np.ndarray, i: int, depth: int) -> bool:
 
 
 def compute_zigzag(high: np.ndarray, low: np.ndarray, depth: int,
-                   max_points: int = 20, snap: bool = True) -> List[ZPoint]:
+                   max_points: int = 20, snap: bool = True,
+                   with_confirm: bool = False) -> List[ZPoint]:
     """Return the zigzag pivot list for a given depth.
 
     Replicates Pine's per-depth array (p*p / p*b / p*t) capped at `max_points`
@@ -67,6 +68,14 @@ def compute_zigzag(high: np.ndarray, low: np.ndarray, depth: int,
 
     `snap=True` ([PRECISION]) re-anchors each pivot to the true extreme of its
     leg after the Pine-faithful pass — see _snap_to_extremes.
+
+    `with_confirm=True` returns 4-tuples (price, bar, is_high, know_bar)
+    where know_bar = max(raw pivot bar, snapped bar): the earliest bar at
+    which the pivot's existence was actually detectable under the raw
+    symmetric-window rule (snap can move a pivot's bar BACKWARD to an
+    extreme that was never itself a confirmed pivot — a live scan of the
+    prefix could not have known it yet). Backtests must key confirmation
+    to know_bar + depth, not the snapped bar.
     """
     n = len(high)
     pts: List[ZPoint] = []  # each: [price, bar_index, is_high]
@@ -85,9 +94,19 @@ def compute_zigzag(high: np.ndarray, low: np.ndarray, depth: int,
         if is_pl:
             _merge(pts, low[i], i, False)
 
+    # Raw confirmed pivot bars, captured BEFORE snapping (see with_confirm).
+    raw_bars = [p[1] for p in pts]
+
     # [PRECISION] snap before capping so every pivot still has real neighbours.
     if snap:
         pts = _snap_to_extremes(pts, high, low, n)
+
+    if with_confirm:
+        out4 = [(p[0], p[1], p[2], max(rb, p[1]))
+                for p, rb in zip(pts, raw_bars)]
+        if len(out4) > max_points:
+            out4 = out4[-max_points:]
+        return out4
 
     # Keep only the last `max_points` (Pine: while size>20 shift from front).
     if len(pts) > max_points:

@@ -66,11 +66,14 @@ def test_ideal_gartley_confluence():
     d = g[0]
     # anchor 0.786*XA = 1021.4 must be inside the PRZ
     assert d.prz_lo <= 1021.4 <= d.prz_hi, (d.prz_lo, d.prz_hi)
-    # book confluence: XA anchor + AB=CD (1014.6) + BC 1.414 (1022.4)
-    assert d.conf_n == 3, f"expected 3-element confluence, got {d.conf_n}"
+    # [BOOK-V3] confluence: XA anchor + AB=CD (1014.6) + 1.27AB=CD (997.9)
+    # + BC 1.414 (1022.4) -> 4 clustered elements
+    assert d.conf_n == 4, f"expected 4-element confluence, got {d.conf_n}"
     assert d.prz_lo <= 1014.6 <= d.prz_hi
     # implied CD/BC inside the book Gartley range 1.13-1.618
     assert 1.13 <= d.bc_proj <= 1.618, d.bc_proj
+    # [BOOK-V3 p.92] stop just beyond 1.0 XA: A - 1.02*XA = 998
+    assert abs(d.stop - 998.0) < 0.01, d.stop
     assert d.valid
 
 
@@ -87,6 +90,8 @@ def test_ideal_bat():
     assert d.prz_lo <= 1011.4 <= d.prz_hi        # 0.886 XA anchor
     assert 1.618 <= d.bc_proj <= 2.618, d.bc_proj
     assert d.conf_n >= 2, d.conf_n
+    # [BOOK-V3 p.98] stop just beyond 1.13 XA: A - 1.15*XA = 985
+    assert abs(d.stop - 985.0) < 0.01, d.stop
 
 
 def test_crab_bc_gate_rejects_shallow_c():
@@ -117,9 +122,9 @@ def test_crab_bc_gate_rejects_shallow_c():
 
 
 def test_shark_two_sided_zone():
-    # X=1000 A=1100 B=1050 (0.5) C=1115 (ext 1.3 of AB, beyond A)
+    # X=1000 A=1100 B=1050 (br=0.50) C=1150 (impulse bcp=2.0, beyond A)
     points = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
-              (1050.0, 30, False), (1115.0, 40, True)]
+              (1050.0, 30, False), (1150.0, 40, True)]
     high, low, close = _flat_tail_arrays()
     dets = scan_points("TST", points, high, low, close,
                        tol_val=5.0, is_strict=True, cfg=_cfg())
@@ -130,20 +135,28 @@ def test_shark_two_sided_zone():
     assert abs(d.prz_lo - 987.0) < 0.5 and abs(d.prz_hi - 1011.4) < 0.5, \
         (d.prz_lo, d.prz_hi)
     assert d.conf_n >= 2
+    # [BOOK-V3] impulse leg bcp = BC/AB must be within 1.618-2.24
+    assert 1.618 <= d.bcp <= 2.24, d.bcp
 
 
-def test_shark_bc_band_overlap_accepts_edge_case():
-    """[BOOK] A Shark whose BC projection band (1.618-2.24) overlaps only
-    the TOP edge of the 0.886-1.13 completion zone is book-valid and must
-    pass the strict gate (the old midpoint-based gate rejected it)."""
-    # X=1000 A=1100 B=1061.8 (br=0.382) C=1104.97 (ext 1.13 of AB)
-    points = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
-              (1061.8, 30, False), (1104.97, 40, True)]
+def test_shark_impulse_leg_gate():
+    """[BOOK-V3 p.118/120/129] The Extreme Harmonic Impulse (bcp = BC/AB)
+    must be 1.618-2.24. Below (weak) and above (over-extended, e.g. the
+    GIAA case at 3.875) are both rejected."""
     high, low, close = _flat_tail_arrays()
-    dets = scan_points("TST", points, high, low, close,
-                       tol_val=5.0, is_strict=True, cfg=_cfg())
-    s = [d for d in dets if d.pattern == "Shark" and d.bull]
-    assert s, f"edge-overlap Shark not detected: {_names(dets)}"
+
+    def shark_bcp(bcp_target):
+        # X=1000 A=1100 (XA=100) B=1050 (AB=50) C=1050+bcp*50
+        cP = 1050.0 + bcp_target * 50.0
+        pts = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
+               (1050.0, 30, False), (cP, 40, True)]
+        dets = scan_points("TST", pts, high, low, close,
+                           tol_val=5.0, is_strict=True, cfg=_cfg())
+        return any(d.pattern == "Shark" and d.bull for d in dets)
+
+    assert not shark_bcp(1.30), "impulse 1.30 (below 1.618) must be rejected"
+    assert shark_bcp(1.80), "impulse 1.80 (in 1.618-2.24) must be detected"
+    assert not shark_bcp(3.00), "impulse 3.00 (above 2.24) must be rejected"
 
 
 def test_structure_guard_rejects_c_beyond_a_for_gartley():
@@ -155,6 +168,47 @@ def test_structure_guard_rejects_c_beyond_a_for_gartley():
     dets = scan_points("TST", points, high, low, close,
                        tol_val=5.0, is_strict=True, cfg=_cfg())
     assert "Gartley" not in _names(dets), _names(dets)
+
+
+def test_b_point_absolute_pp_tolerance():
+    """[BOOK-V3 p.91] Gartley B tolerance is +/-3 percentage points
+    (0.588-0.648) and is a HARD maximum ("become invalid above the upper
+    limit"): br=0.66 must fail BOTH passes; br=0.64 (inside) passes."""
+    high, low, close = _flat_tail_arrays()
+
+    # br = 0.66 -> B = 1034: invalid on strict AND loose
+    bad = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
+           (1034.0, 30, False), (1074.79, 40, True)]
+    strict = scan_points("TST", bad, high, low, close,
+                         tol_val=5.0, is_strict=True, cfg=_cfg())
+    assert "Gartley" not in _names(strict), _names(strict)
+    loose = scan_points("TST", bad, high, low, close,
+                        tol_val=10.0, is_strict=False, cfg=_cfg())
+    assert "Gartley" not in _names(loose), _names(loose)
+
+    # br = 0.64 -> B = 1036 (inside 0.588-0.648): valid; C = 0.618 of AB
+    ok = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
+          (1036.0, 30, False), (1075.55, 40, True)]
+    dets = scan_points("TST", ok, high, low, close,
+                       tol_val=5.0, is_strict=True, cfg=_cfg())
+    assert "Gartley" in _names(dets), _names(dets)
+
+
+def test_shark_targets_from_cd_leg():
+    """[BOOK-V3 p.118] Shark TP1/TP2 = 50%/61.8% retracement of the final
+    leg (C -> D zone mid), TP3 = full retest of C."""
+    points = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
+              (1050.0, 30, False), (1150.0, 40, True)]  # impulse bcp=2.0
+    high, low, close = _flat_tail_arrays()
+    dets = scan_points("TST", points, high, low, close,
+                       tol_val=5.0, is_strict=True, cfg=_cfg())
+    d = [x for x in dets if x.pattern == "Shark" and x.bull][0]
+    leg = d.cP - d.prz_mid
+    assert abs(d.tp1 - (d.prz_mid + 0.5 * leg)) < 1e-6
+    assert abs(d.tp2 - (d.prz_mid + 0.618 * leg)) < 1e-6
+    assert abs(d.tp3 - d.cP) < 1e-6
+    # stop just beyond the 1.13 XA zone edge: A - 1.15*XA = 985
+    assert abs(d.stop - 985.0) < 0.01, d.stop
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +274,28 @@ def test_pick_top_two_nearest_highest_accuracy():
     assert d_inside_60 in top                     # best buy always kept
     assert d_invalid_99 not in top                # invalid ranked last
     assert d_far_95 not in top                    # distance dominates score
+
+
+def test_filter_results_quality_subset():
+    """--quality: hanya best_buy Crab/Bat dengan conf>=2 yang lolos."""
+    from prz_scanner.scanner import (StockResult, filter_results,
+                                     QUALITY_PATTERNS, QUALITY_MIN_CONF)
+
+    def _res(pattern, conf):
+        d = _mk_det(990, 1010, 70)
+        d.pattern, d.conf_n = pattern, conf
+        return StockResult(ticker=pattern, df=None, all_dets=[d],
+                           best_buy=d, passed=True, top_dets=[d])
+
+    results = [_res("Crab", 3), _res("Bat", 2), _res("Bat", 1),
+               _res("Gartley", 4), _res("Shark", 3)]
+    out = filter_results(results, only=list(QUALITY_PATTERNS),
+                         min_conf=QUALITY_MIN_CONF)
+    kept = {r.ticker for r in out}
+    assert kept == {"Crab", "Bat"}, kept          # Bat conf1 & non-CrabBat out
+    assert all(r.best_buy.conf_n >= 2 for r in out)
+    # tanpa filter -> semua lolos
+    assert len(filter_results(results)) == 5
 
 
 def test_pick_top_forces_best_buy():
