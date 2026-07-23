@@ -27,7 +27,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--prz-maxw", type=float, help="max PRZ width %% (default 15)")
     p.add_argument("--tol-strict", type=float)
     p.add_argument("--tol-loose", type=float)
-    p.add_argument("--strict-bc", action="store_true", help="enforce BC gate")
+    p.add_argument("--strict-bc", action=argparse.BooleanOptionalAction,
+                   default=True,
+                   help="book BC-projection gate (default ON; --no-strict-bc disables)")
     p.add_argument("--no-charts", action="store_true")
     p.add_argument("--output", default="output")
     return p.parse_args(argv)
@@ -50,8 +52,7 @@ def build_config(args: argparse.Namespace) -> Config:
         cfg.tol_strict = args.tol_strict
     if args.tol_loose is not None:
         cfg.tol_loose = args.tol_loose
-    if args.strict_bc:
-        cfg.strict_bc = True
+    cfg.strict_bc = args.strict_bc
     cfg.output_dir = args.output
     return cfg
 

@@ -10,8 +10,10 @@ Filter (PRD §5 — [DEVIATION] proximity concept, not in Pine):
 Best-pattern selection per stock (Pine f_pickBest priority):
   1. valid > invalid   2. closer to price   3. XABCD (all are here)   4. score.
 
-Chart, however, shows ALL detected PRZ (buy AND sell) — selection only ranks
-the "best buy" for the summary. See chart_render.py.
+Chart display ([DEVIATION]): only the top `cfg.max_display` (default 2)
+patterns are drawn — ranked nearest-to-price first, highest accuracy score
+as tie-break, valid before invalid; the best buy is always included. This
+replaces the old draw-everything behaviour that cluttered charts.
 """
 
 from dataclasses import dataclass
@@ -28,22 +30,56 @@ from .zigzag import compute_zigzag
 class StockResult:
     ticker: str
     df: pd.DataFrame
-    all_dets: List[Detection]      # every detection (buy+sell) for charting
+    all_dets: List[Detection]      # every deduped detection (buy+sell)
     best_buy: Optional[Detection]  # ranked best bullish for summary
     passed: bool
     realtime_close: Optional[float] = None  # harga real-time (5m delayed), None jika tidak tersedia
+    top_dets: List[Detection] = None  # nearest+highest-accuracy picks for chart
+
+
+# Two detections of the same pattern/direction whose PRZ mids sit within
+# this % of each other are considered the same zone (across depth passes).
+_DEDUP_MID_PCT = 1.5
 
 
 def _dedup(dets: List[Detection]) -> List[Detection]:
-    """Collapse near-identical detections (same pattern/dir/PRZ) across
-    depth+tolerance passes, keeping the higher score (prefer strict)."""
-    seen: Dict[tuple, Detection] = {}
-    for d in dets:
-        key = (d.pattern, d.bull, round(d.prz_lo, 4), round(d.prz_hi, 4))
-        cur = seen.get(key)
-        if cur is None or d.score > cur.score or (d.is_strict and not cur.is_strict):
-            seen[key] = d
-    return list(seen.values())
+    """Collapse near-identical detections (same pattern/dir with PRZ mids
+    within _DEDUP_MID_PCT%) across depth+tolerance passes, keeping the
+    highest-scoring one. Greedy over score-descending order."""
+    out: List[Detection] = []
+    for d in sorted(dets, key=lambda x: -x.score):
+        dup = any(
+            k.pattern == d.pattern and k.bull == d.bull
+            and abs(k.prz_mid - d.prz_mid) / abs(k.prz_mid) * 100 < _DEDUP_MID_PCT
+            for k in out if k.prz_mid != 0
+        )
+        if not dup:
+            out.append(d)
+    return out
+
+
+def _dist_to_prz(d: Detection, last_close: float) -> float:
+    """Unsigned % gap between price and the PRZ (0 when inside)."""
+    if d.prz_lo <= last_close <= d.prz_hi:
+        return 0.0
+    if last_close > d.prz_hi:
+        return (last_close - d.prz_hi) / d.prz_hi * 100
+    return (d.prz_lo - last_close) / max(last_close, 1e-9) * 100
+
+
+def _pick_top(dets: List[Detection], best_buy: Optional[Detection],
+              last_close: float, max_display: int) -> List[Detection]:
+    """[DEVIATION] Chart picks: the `max_display` nearest patterns, using
+    accuracy score to break near-ties (2%-wide distance buckets), valid
+    before invalid. The best buy is always kept."""
+    def rank(d: Detection):
+        return (0 if d.valid else 1,
+                round(_dist_to_prz(d, last_close) / 2.0),
+                -d.score)
+    top = sorted(dets, key=rank)[:max_display]
+    if best_buy is not None and best_buy not in top:
+        top = [best_buy] + top[:max_display - 1]
+    return top
 
 
 def scan_stock(ticker: str, df: pd.DataFrame, cfg: Config,
@@ -99,9 +135,12 @@ def scan_stock(ticker: str, df: pd.DataFrame, cfg: Config,
             return (0 if d.valid else 1, dist, -d.score)
         best_buy = sorted(buy_candidates, key=rank)[0]
 
+    top_dets = _pick_top(dets, best_buy, last_close,
+                         getattr(cfg, "max_display", 2))
+
     return StockResult(ticker=ticker, df=df, all_dets=dets,
                        best_buy=best_buy, passed=passed,
-                       realtime_close=realtime_price)
+                       realtime_close=realtime_price, top_dets=top_dets)
 
 
 def scan_watchlist(data: Dict[str, pd.DataFrame], cfg: Config,

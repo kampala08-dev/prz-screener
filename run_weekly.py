@@ -24,7 +24,9 @@ def parse_args(argv=None):
     p.add_argument("--prz-maxw", type=float)
     p.add_argument("--tol-strict", type=float)
     p.add_argument("--tol-loose", type=float)
-    p.add_argument("--strict-bc", action="store_true")
+    p.add_argument("--strict-bc", action=argparse.BooleanOptionalAction,
+                   default=True,
+                   help="BC-projection gate sesuai buku (default ON; --no-strict-bc utk melonggarkan)")
     p.add_argument("--no-charts", action="store_true")
     p.add_argument("--output", default=None)
     p.add_argument("--telegram", action="store_true",
@@ -54,8 +56,7 @@ def build_config(args):
         cfg.tol_strict = args.tol_strict
     if args.tol_loose is not None:
         cfg.tol_loose = args.tol_loose
-    if args.strict_bc:
-        cfg.strict_bc = True
+    cfg.strict_bc = args.strict_bc
     if args.output is not None:
         cfg.output_dir = args.output
     return cfg

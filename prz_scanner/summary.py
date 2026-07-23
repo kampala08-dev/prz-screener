@@ -45,6 +45,7 @@ def build_summary(results: List[StockResult], timeframe: str) -> pd.DataFrame:
             "Dist%": round(0.0 if inside else gap, 2),
             "Zone": "INSIDE" if inside else "approaching",
             "Valid": "valid" if d.valid else "invalid",
+            "Conf": d.conf_n,
             "Score": round(d.score, 1),
             "TP1": round(d.tp1, 2),
             "TP2": round(d.tp2, 2),

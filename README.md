@@ -163,15 +163,30 @@ UNIVERSE: List[str] = [
 
 ## Pola Harmonic yang Dideteksi
 
-| Pattern | D Retracement |
-|---------|--------------|
-| Gartley | 0.786 XA |
-| Bat | 0.886 XA |
-| Butterfly | 1.27 XA |
-| Crab | 1.618 XA |
-| Shark | 0.886 XA (BC ext > 1.13) |
+Rasio mengikuti buku *Harmonic Trading* (Scott Carney):
 
-Ported 1:1 dari Pine Script "Harmonic PRZ Scanner v9" (TradingView).
+| Pattern | B (XA) | BC Projection | D (XA) |
+|---------|--------|---------------|--------|
+| Gartley | 0.618 | 1.13–1.618 | 0.786 |
+| Bat | 0.382–0.50 | 1.618–2.618 | 0.886 |
+| Butterfly | 0.786 | 1.618–2.24 | 1.27 |
+| Crab | 0.382–0.618 | 2.618–3.618 | 1.618 |
+| Shark | 0.382–0.618 | 1.618–2.24 | 0.886–1.13 (zona dua sisi) |
+
+Basis port dari Pine Script "Harmonic PRZ Scanner v9" (TradingView),
+di-upgrade sesuai buku:
+
+- **PRZ = confluence cluster** — anchor proyeksi XA + completion AB=CD
+  (termasuk alternate 1.27/1.618) + level proyeksi BC terdekat yang jatuh
+  dalam `prz_cluster_tol` (3%). Kolom **Conf** di summary = jumlah elemen
+  yang berkumpul (3 = PRZ klasik 3-elemen ala buku).
+- **Gate proyeksi BC** memvalidasi CD/BC implied terhadap range buku
+  (default ON; matikan dengan `--no-strict-bc`).
+- **Zigzag snap-to-extreme** — pivot di-re-anchor ke wick paling ekstrem
+  di leg-nya, sehingga garis XABCD selalu menempel di swing high/low sejati.
+- **Chart menampilkan maksimal 2 pola** — yang terdekat ke harga dengan
+  akurasi tertinggi (best buy selalu ikut), lengkap dengan huruf X-A-B-C-D,
+  label rasio tiap leg, dan proyeksi D. Chart otomatis di-crop ke area pola.
 
 ---
 

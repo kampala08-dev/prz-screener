@@ -28,7 +28,9 @@ def parse_args(argv=None):
                    help="max lebar PRZ persen (default 15)")
     p.add_argument("--tol-strict", type=float)
     p.add_argument("--tol-loose", type=float)
-    p.add_argument("--strict-bc", action="store_true")
+    p.add_argument("--strict-bc", action=argparse.BooleanOptionalAction,
+                   default=True,
+                   help="BC-projection gate sesuai buku (default ON; --no-strict-bc utk melonggarkan)")
     p.add_argument("--no-charts", action="store_true")
     p.add_argument("--output", default=None,
                    help="folder output (default: output/h4)")
@@ -57,8 +59,7 @@ def build_config(args):
         cfg.tol_strict = args.tol_strict
     if args.tol_loose is not None:
         cfg.tol_loose = args.tol_loose
-    if args.strict_bc:
-        cfg.strict_bc = True
+    cfg.strict_bc = args.strict_bc
     if args.output is not None:
         cfg.output_dir = args.output
     return cfg

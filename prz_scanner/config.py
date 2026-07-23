@@ -122,8 +122,11 @@ class Config:
     enable_strict: bool = True
     enable_loose: bool = True
 
-    # --- Pine: strict_bc gate (default OFF -> BC gate always passes) ---
-    strict_bc: bool = False
+    # --- [BOOK] BC-projection gate (implied CD/BC vs book range) ---
+    # Default ON: the gate now checks the *implied* CD/BC projection (the
+    # Pine port gated bc/ab, which could never pass — dead code). Disable
+    # with --no-strict-bc on the runners to loosen detection.
+    strict_bc: bool = True
 
     # --- distance / validity (Pine) ---
     max_dist: float = 80.0         # Pine input default = 80%
@@ -142,6 +145,13 @@ class Config:
     # prz_maxw: PRD asks 15% max PRZ width. Pine boxes are already narrow
     # (fixed ±3-5% of XA), so this is a light guard, applied on final box.
     prz_maxw: float = 15.0
+    # [BOOK] confluence: a PRZ element (AB=CD completion, BC projection
+    # level) joins the PRZ cluster if it lands within this % of the XA
+    # anchor. Tighter -> stricter confluence requirement.
+    prz_cluster_tol: float = 3.0
+    # [DEVIATION] chart neatness: draw at most this many patterns per chart
+    # (the nearest-to-price, highest-accuracy ones; best buy always shown).
+    max_display: int = 2
 
     # --- output ---
     output_dir: str = "output"

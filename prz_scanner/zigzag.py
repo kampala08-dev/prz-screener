@@ -10,6 +10,15 @@ all confirmed pivots by scanning bars whose right window fits within the data.
 After detecting each raw pivot, Pine folds consecutive same-direction pivots into
 one, keeping the more extreme (higher high / lower low). We replicate that exactly,
 including the `time[depth]` bookkeeping (here: the integer bar index of the pivot).
+
+[PRECISION] deviation from the raw Pine port (see _snap_to_extremes):
+Symmetric-window pivots use a strict `>` test, so twin peaks/troughs within
+`depth` bars of each other can disqualify one another, leaving the zigzag
+anchored on a lesser swing (or missing the true extreme entirely). After the
+Pine-faithful pivot pass we re-anchor each pivot to the TRUE extreme high/low
+of its leg (the interval between its neighbouring opposite pivots), processed
+left-to-right so bar ordering and high/low alternation are preserved. This
+makes XABCD legs land exactly on the most extreme wick of each swing.
 """
 
 from typing import List, Tuple
@@ -50,11 +59,14 @@ def _pivot_low(low: np.ndarray, i: int, depth: int) -> bool:
 
 
 def compute_zigzag(high: np.ndarray, low: np.ndarray, depth: int,
-                   max_points: int = 20) -> List[ZPoint]:
+                   max_points: int = 20, snap: bool = True) -> List[ZPoint]:
     """Return the zigzag pivot list for a given depth.
 
     Replicates Pine's per-depth array (p*p / p*b / p*t) capped at `max_points`
     (Pine keeps the last 20 via `while size > 20: shift`).
+
+    `snap=True` ([PRECISION]) re-anchors each pivot to the true extreme of its
+    leg after the Pine-faithful pass — see _snap_to_extremes.
     """
     n = len(high)
     pts: List[ZPoint] = []  # each: [price, bar_index, is_high]
@@ -73,10 +85,45 @@ def compute_zigzag(high: np.ndarray, low: np.ndarray, depth: int,
         if is_pl:
             _merge(pts, low[i], i, False)
 
+    # [PRECISION] snap before capping so every pivot still has real neighbours.
+    if snap:
+        pts = _snap_to_extremes(pts, high, low, n)
+
     # Keep only the last `max_points` (Pine: while size>20 shift from front).
     if len(pts) > max_points:
         pts = pts[-max_points:]
     return [(p[0], p[1], p[2]) for p in pts]
+
+
+def _snap_to_extremes(pts: list, high: np.ndarray, low: np.ndarray,
+                      n: int) -> list:
+    """[PRECISION] Re-anchor each pivot to the true extreme of its leg.
+
+    For pivot k the leg interval is (bar[k-1], bar[k+1]) exclusive — for the
+    first pivot the interval starts at bar 0, for the last it runs to n-1 (so
+    a still-developing extreme after the last confirmed pivot is captured).
+    Processing is left-to-right and the left bound uses the ALREADY-SNAPPED
+    bar of pivot k-1, which guarantees strictly increasing bar indices and
+    preserved high/low alternation.
+    """
+    if not pts:
+        return pts
+    out = [list(p) for p in pts]
+    for k in range(len(out)):
+        left = out[k - 1][1] + 1 if k > 0 else 0
+        right = out[k + 1][1] - 1 if k < len(out) - 1 else n - 1
+        if right < left:
+            continue
+        price, bar, is_high = out[k]
+        if is_high:
+            j = left + int(np.argmax(high[left:right + 1]))
+            if high[j] > price:
+                out[k] = [float(high[j]), j, True]
+        else:
+            j = left + int(np.argmin(low[left:right + 1]))
+            if low[j] < price:
+                out[k] = [float(low[j]), j, False]
+    return out
 
 
 def _merge(pts: list, price: float, bar_idx: int, is_high: bool) -> None:
