@@ -72,7 +72,8 @@ def fetch_one(code: str, cfg: Config, retries: int = 3) -> Optional[pd.DataFrame
     # Kita cukup menggunakan n_bars untuk menentukan seberapa jauh ke belakang
     if cfg.timeframe == "1d":
         interval = Interval.in_daily
-        n_bars = 500  # ~2 tahun trading days
+        # ~2 tahun trading days; backtest dapat menaikkan via n_bars_daily
+        n_bars = getattr(cfg, "n_bars_daily", 500)
     elif cfg.timeframe == "1wk":
         interval = Interval.in_weekly
         n_bars = 260  # ~5 tahun (52 mgg * 5)
