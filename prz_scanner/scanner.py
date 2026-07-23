@@ -143,6 +143,36 @@ def scan_stock(ticker: str, df: pd.DataFrame, cfg: Config,
                        realtime_close=realtime_price, top_dets=top_dets)
 
 
+# Backtest-proven signal subset (5y walk-forward, 362 saham; lihat
+# docs/PERUBAHAN_SCREENER.md): Crab 63.9% & Bat 53.8% win; gabungan
+# dengan confluence >=2 -> 58.2% win, +0.163R (bertahan di 2024+).
+QUALITY_PATTERNS = ("Crab", "Bat")
+QUALITY_MIN_CONF = 2
+
+
+def filter_results(results: List["StockResult"],
+                   only: Optional[List[str]] = None,
+                   min_conf: int = 0) -> List["StockResult"]:
+    """[DEVIATION] Signal-quality filter on scan results (post-scan).
+
+    Keeps a stock only if its best_buy pattern is in `only` (case-
+    insensitive; None = all patterns) AND its confluence count >= min_conf.
+    Charts/summary/Telegram then show only the filtered set.
+    """
+    allowed = {p.lower() for p in only} if only else None
+    out = []
+    for r in results:
+        d = r.best_buy
+        if d is None:
+            continue
+        if allowed is not None and d.pattern.lower() not in allowed:
+            continue
+        if d.conf_n < min_conf:
+            continue
+        out.append(r)
+    return out
+
+
 def scan_watchlist(data: Dict[str, pd.DataFrame], cfg: Config,
                    realtime_prices: Dict[str, float] = None) -> List[StockResult]:
     """Scan all tickers. realtime_prices dict {ticker -> price} overrides

@@ -48,12 +48,13 @@ PYTHON = sys.executable   # same python env as this script
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def _run(script: str, label: str):
+def _run(script: str, label: str, extra_args=()):
     """Run a scanner script as subprocess, stream output to log."""
     log.info(f"{'='*50}")
     log.info(f"START: {label}")
     log.info(f"{'='*50}")
-    cmd = [PYTHON, os.path.join(BASE_DIR, script), "--telegram", "--images-only", "--cleanup"]
+    cmd = [PYTHON, os.path.join(BASE_DIR, script),
+           "--telegram", "--images-only", "--cleanup", *extra_args]
     try:
         result = subprocess.run(
             cmd,
@@ -70,10 +71,13 @@ def _run(script: str, label: str):
 
 
 def job_daily():
-    _run("run_daily.py", "Daily Scan")
+    # --quality: subset teruji backtest 5 tahun (Crab+Bat, confluence >=2 —
+    # 58% win, +0.16R). Hapus flag ini untuk kembali ke semua pola.
+    _run("run_daily.py", "Daily Scan (quality)", extra_args=("--quality",))
 
 
 def job_weekly():
+    # Weekly tetap semua pola: bukti backtest baru mencakup Daily.
     _run("run_weekly.py", "Weekly Scan")
 
 

@@ -58,6 +58,21 @@ python run_daily.py
 | `--proximity 3` | Ambang "mendekati PRZ" dalam % (default 3) |
 | `--max-dist 80` | Max jarak PRZ dari harga (default 80%) |
 | `--period 5y` | Periode history (khusus `run_weekly.py`) |
+| `--only Crab Bat` | Hanya pola tertentu |
+| `--min-conf 2` | Minimal elemen confluence PRZ |
+| `--quality` | Preset subset teruji backtest (= `--only Crab Bat --min-conf 2`; 58% win, +0.16R pada 5 tahun × 362 saham). Scheduler harian memakai ini. |
+
+### Backtest
+
+```bash
+python run_backtest.py                 # semua saham, ~5 tahun, BUY only
+python run_backtest.py --tickers BBCA  # subset
+```
+
+Walk-forward konservatif: entry saat sentuh PRZ setelah konfirmasi pivot,
+exit penuh di TP1, SL level buku, SL didahulukan pada bar ambigu, jendela
+entry 60 bar. Hasil & keterbatasan (survivorship universe, repaint zigzag)
+didokumentasikan di `docs/PERUBAHAN_SCREENER.md` dan `output/backtest/`.
 
 ---
 
@@ -163,15 +178,20 @@ UNIVERSE: List[str] = [
 
 ## Pola Harmonic yang Dideteksi
 
-Rasio mengikuti buku *Harmonic Trading* (Scott Carney):
+Rasio diverifikasi langsung terhadap *Harmonic Trading Volume 3* (Scott
+Carney) — nomor halaman merujuk edisi cetak:
 
-| Pattern | B (XA) | BC Projection | D (XA) |
-|---------|--------|---------------|--------|
-| Gartley | 0.618 | 1.13–1.618 | 0.786 |
-| Bat | 0.382–0.50 | 1.618–2.618 | 0.886 |
-| Butterfly | 0.786 | 1.618–2.24 | 1.27 |
-| Crab | 0.382–0.618 | 2.618–3.618 | 1.618 |
-| Shark | 0.382–0.618 | 1.618–2.24 | 0.886–1.13 (zona dua sisi) |
+| Pattern | B (XA) | Tol. B | AB=CD Type | BC Projection | D (XA) | Stop | Hal. |
+|---------|--------|--------|------------|---------------|--------|------|------|
+| Gartley | 0.618 | ±3pp | 1.0–1.27 | 1.13–1.618 | 0.786 | >1.0 XA | 92 |
+| Bat | 0.382–0.50 | ±5pp | 1.0–1.618 | 1.618–2.618 | 0.886 | >1.13 XA | 98 |
+| Butterfly | 0.786 | ±3pp | 1.0–1.27 | 1.618–2.24 | 1.27 | >1.414 XA | 113 |
+| Crab | 0.382–0.618 | ±5pp | 1.0–1.618 | 2.618–3.618 | 1.618 | >2.0 XA | 104 |
+| Shark | 0.382–0.618¹ | ±5pp | — | 1.618–2.24 (band) | 0.886–1.13 (dua sisi) | >1.13 XA | 118–120 |
+
+¹ "0X retracement at the A point" (h.119). Toleransi B = poin persentase
+**absolut** (h.91) dan bersifat *hard maximum* — tidak dilebarkan di pass
+loose. TP Shark = retrace 50%/61.8% dari leg akhir (h.118).
 
 Basis port dari Pine Script "Harmonic PRZ Scanner v9" (TradingView),
 di-upgrade sesuai buku:

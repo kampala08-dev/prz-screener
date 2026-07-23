@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from prz_scanner.config import daily_config
 from prz_scanner.data_fetch import fetch_all, fetch_realtime_prices
-from prz_scanner.scanner import scan_watchlist
+from prz_scanner.scanner import scan_watchlist, filter_results, QUALITY_PATTERNS, QUALITY_MIN_CONF
 from prz_scanner.chart_render import render_chart
 from prz_scanner.summary import build_summary, write_summary
 
@@ -31,6 +31,12 @@ def parse_args(argv=None):
     p.add_argument("--strict-bc", action=argparse.BooleanOptionalAction,
                    default=True,
                    help="BC-projection gate sesuai buku (default ON; --no-strict-bc utk melonggarkan)")
+    p.add_argument("--only", nargs="+", metavar="POLA",
+                   help="hanya pola tertentu (mis: --only Crab Bat)")
+    p.add_argument("--min-conf", type=int, default=0,
+                   help="minimal jumlah elemen confluence PRZ (default 0)")
+    p.add_argument("--quality", action="store_true",
+                   help="preset subset teruji backtest: --only Crab Bat --min-conf 2")
     p.add_argument("--no-charts", action="store_true")
     p.add_argument("--output", default=None,
                    help="folder output (default: output/daily)")
@@ -100,6 +106,18 @@ def main(argv=None):
     print("\n[2/4] Scanning harmonic PRZ buy zones (Daily)...")
     results = scan_watchlist(data, cfg, realtime_prices=realtime_prices)
     print(f"      {len(results)} saham lolos proximity filter")
+
+    # [DEVIATION] filter kualitas sinyal (subset teruji backtest)
+    only = args.only
+    min_conf = args.min_conf
+    if args.quality:
+        only = only or list(QUALITY_PATTERNS)
+        min_conf = max(min_conf, QUALITY_MIN_CONF)
+    if only or min_conf:
+        before = len(results)
+        results = filter_results(results, only=only, min_conf=min_conf)
+        print(f"      filter kualitas ({'+'.join(only) if only else 'semua'}, "
+              f"conf>={min_conf}): {before} -> {len(results)} saham")
 
     print("\n[3/4] Menulis summary...")
     df = build_summary(results, cfg.timeframe)
