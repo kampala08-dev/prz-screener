@@ -15,7 +15,11 @@ import pandas as pd
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # override=True: .env adalah sumber kebenaran kredensial proyek ini
+    # (lihat README). Tanpa ini, env var shell yang sudah ter-set —
+    # mis. dari proyek lain — diam-diam MENIMPA .env dan pesan bisa
+    # terkirim ke bot/grup yang salah.
+    load_dotenv(override=True)
 except ImportError:
     pass
 
