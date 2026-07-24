@@ -1,0 +1,6 @@
+# Nixpacks build config untuk Railway.
+# "..." = pertahankan paket yang dideteksi otomatis (Python, pip);
+# tambahkan git karena requirements.txt memasang tvdatafeed dari GitHub
+# (tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git).
+[phases.setup]
+nixPkgs = ["...", "git"]
