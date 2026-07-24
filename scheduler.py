@@ -71,9 +71,10 @@ def _run(script: str, label: str, extra_args=()):
 
 
 def job_daily():
-    # --quality: subset teruji backtest 5 tahun (Crab+Bat, confluence >=2 —
-    # 58% win, +0.16R). Hapus flag ini untuk kembali ke semua pola.
-    _run("run_daily.py", "Daily Scan (quality)", extra_args=("--quality",))
+    # Kirim SEMUA pola yang mendekati/di dalam PRZ (permintaan Rio).
+    # Tambahkan "--quality" di extra_args untuk kembali ke subset teruji
+    # backtest (Crab+Bat conf>=2 — 58% win, +0.16R).
+    _run("run_daily.py", "Daily Scan")
 
 
 def job_weekly():
