@@ -57,16 +57,61 @@ class TelegramSender:
     def _url(self, method: str) -> str:
         return self.BASE_URL.format(token=self.token, method=method)
 
+    def _redact(self, text: str) -> str:
+        """Hapus bot token dari string sebelum menyentuh log/stdout.
+
+        URL Bot API memuat token (api.telegram.org/bot<TOKEN>/...), dan pesan
+        exception `requests` (HTTPError/ConnectionError/Timeout) menyertakan
+        URL lengkap — tanpa redaksi, token asli bocor ke logs/scheduler.log
+        dan journalctl di VPS setiap kali Telegram error.
+        """
+        return text.replace(self.token, "***TOKEN***") if self.token else text
+
+    # Maks pengulangan saat Telegram flood control (HTTP 429).
+    _MAX_429_RETRY = 2
+    # Batas atas menghormati retry_after agar satu 429 ekstrem tidak
+    # memblokir scan terlalu lama.
+    _MAX_429_WAIT_S = 90
+
     def _post(self, method: str, data: dict = None, files=None,
               timeout: int = 30) -> dict:
-        """POST to Telegram API."""
-        r = requests.post(self._url(method), data=data, files=files,
-                          timeout=timeout)
-        r.raise_for_status()
-        resp = r.json()
-        if not resp.get("ok"):
-            raise RuntimeError(f"Telegram API error: {resp}")
-        return resp
+        """POST to Telegram API.
+
+        - HTTP 429: patuhi parameters.retry_after lalu ulangi (maks
+          _MAX_429_RETRY kali) — tanpa ini, sinyal ke-20+ saat hasil scan
+          banyak akan drop diam-diam.
+        - Semua error dilempar sebagai RuntimeError dengan pesan yang sudah
+          di-redact (bebas token), aman untuk di-print pemanggil.
+        """
+        for attempt in range(self._MAX_429_RETRY + 1):
+            try:
+                r = requests.post(self._url(method), data=data, files=files,
+                                  timeout=timeout)
+                if r.status_code == 429 and attempt < self._MAX_429_RETRY:
+                    try:
+                        wait_s = int(r.json()["parameters"]["retry_after"])
+                    except (ValueError, KeyError, TypeError):
+                        wait_s = 5
+                    wait_s = min(max(wait_s, 1), self._MAX_429_WAIT_S)
+                    print(f"  [TG] 429 flood control ({method}), "
+                          f"tunggu {wait_s}s lalu ulangi...")
+                    time.sleep(wait_s + 1)
+                    continue
+                r.raise_for_status()
+            except requests.RequestException as e:
+                # `from None`: putus chain traceback agar URL ber-token pada
+                # exception asli tidak ikut tercetak di mana pun.
+                raise RuntimeError(
+                    f"Telegram {method}: {self._redact(str(e))}") from None
+            try:
+                resp = r.json()
+            except ValueError:
+                raise RuntimeError(
+                    f"Telegram {method}: respons bukan JSON "
+                    f"(HTTP {r.status_code})") from None
+            if not resp.get("ok"):
+                raise RuntimeError(f"Telegram API error: {resp}")
+            return resp
 
     def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
         """Send a text message. Falls back to plain text if HTML fails (400)."""
@@ -102,13 +147,17 @@ class TelegramSender:
                    parse_mode: str = "HTML") -> bool:
         """Send a PNG/JPG photo with caption. Falls back to no parse_mode on error."""
         filename = os.path.basename(photo_path)
+        # Baca bytes sekali (bukan file handle): retry 429 di _post mengirim
+        # ulang body — handle yang sudah terbaca ada di EOF dan attempt kedua
+        # akan mengirim foto kosong.
+        with open(photo_path, "rb") as f:
+            photo_bytes = f.read()
         try:
-            with open(photo_path, "rb") as f:
-                self._post("sendPhoto", data={
-                    "chat_id": self.chat_id,
-                    "caption": caption[:1024],
-                    "parse_mode": parse_mode,
-                }, files={"photo": (filename, f)})
+            self._post("sendPhoto", data={
+                "chat_id": self.chat_id,
+                "caption": caption[:1024],
+                "parse_mode": parse_mode,
+            }, files={"photo": (filename, photo_bytes)})
             return True
         except Exception as e:
             err_str = str(e)
@@ -117,11 +166,10 @@ class TelegramSender:
                 try:
                     import re
                     plain_cap = re.sub(r"<[^>]+>", "", caption)[:1024]
-                    with open(photo_path, "rb") as f:
-                        self._post("sendPhoto", data={
-                            "chat_id": self.chat_id,
-                            "caption": plain_cap,
-                        }, files={"photo": (filename, f)})
+                    self._post("sendPhoto", data={
+                        "chat_id": self.chat_id,
+                        "caption": plain_cap,
+                    }, files={"photo": (filename, photo_bytes)})
                     return True
                 except Exception as e2:
                     print(f"[WARN] sendPhoto plain gagal: {e2}")
