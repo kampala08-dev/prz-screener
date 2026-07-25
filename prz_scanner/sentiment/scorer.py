@@ -41,7 +41,13 @@ _SYSTEM = (
 
 
 def _extract_json(text: str) -> Optional[dict]:
-    text = text.strip()
+    text = (text or "").strip()
+    # MiniMax-M3 & model reasoning lain membungkus jawaban dengan blok
+    # <think>...</think> (bisa berisi kurung {} yang mengacaukan regex) —
+    # buang dulu sebelum ekstraksi JSON.
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    # buang pagar markdown ```json ... ``` bila ada
+    text = re.sub(r"```(?:json)?", "", text).strip()
     try:
         return json.loads(text)
     except (json.JSONDecodeError, TypeError):
@@ -102,7 +108,8 @@ class MiniMaxScorer:
                  "content": self._build_user_msg(ticker, headlines)},
             ],
             "temperature": 0.2,
-            "max_tokens": 400,
+            # M3 model reasoning: butuh ruang utk blok <think> + JSON akhir
+            "max_tokens": 2500,
         }
         headers = {"Authorization": f"Bearer {self.api_key}",
                    "Content-Type": "application/json"}

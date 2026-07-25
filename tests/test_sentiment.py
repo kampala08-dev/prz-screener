@@ -109,6 +109,30 @@ def test_scorer_extracts_json_from_noisy_text(monkeypatch):
     assert s.ok and s.score == 0.5 and s.label == "positive"
 
 
+def test_scorer_strips_reasoning_think_block(monkeypatch):
+    # MiniMax-M3 (reasoning) membungkus dgn <think>...</think> sebelum JSON.
+    body = {"choices": [{"message": {"content":
+            "<think>Berita positif: buyback & laba naik.</think>\n"
+            '{"score": 0.8, "label": "positive", "confidence": 0.9, '
+            '"has_material_event": true, "reason": "buyback + laba"}'}}]}
+    monkeypatch.setattr(scorer_mod.requests, "post",
+                        lambda *a, **k: FakeResp(json_data=body))
+    s = MiniMaxScorer(api_key="test").score("X", [Headline("x", "y", "")])
+    assert s.ok and s.score == 0.8 and s.label == "positive"
+
+
+def test_scorer_think_block_with_braces(monkeypatch):
+    # kasus jebakan: blok think berisi {} yang bisa merusak regex naif
+    body = {"choices": [{"message": {"content":
+            '<think>Formatnya {"score": ...}. Berita negatif.</think>'
+            '{"score": -0.6, "label": "negative", "confidence": 0.8, '
+            '"has_material_event": false, "reason": "rugi"}'}}]}
+    monkeypatch.setattr(scorer_mod.requests, "post",
+                        lambda *a, **k: FakeResp(json_data=body))
+    s = MiniMaxScorer(api_key="test").score("X", [Headline("x", "y", "")])
+    assert s.ok and s.score == -0.6 and s.label == "negative"
+
+
 def test_scorer_no_headlines_skips_api(monkeypatch):
     def boom(*a, **k):
         raise AssertionError("API tidak boleh dipanggil tanpa berita")
