@@ -188,6 +188,25 @@ def test_all_windows_finds_historical_pattern():
         [(d.pattern, d.ci) for d in full]
 
 
+def test_dedup_bt_keeps_earliest_confirmed_variant():
+    """[audit 2026-07-25] Dedup lintas depth wajib mempertahankan varian
+    yang terkonfirmasi PALING AWAL (confirm_bar + depth) — yang pertama
+    bisa di-trade live — bukan varian skor tertinggi yang konfirmasinya
+    baru datang belakangan (= seleksi sampel memakai informasi masa depan)."""
+    from prz_scanner.backtest import _dedup_bt
+
+    early = _mk_det(depth=3, confirm_bar=100, score=60.0, ci=100)
+    late = _mk_det(depth=8, confirm_bar=104, score=74.0, ci=104)
+    kept = _dedup_bt([late, early])
+    assert kept == [early], [(d.depth, d.score) for d in kept]
+
+    # waktu konfirmasi efektif sama -> skor jadi tie-break
+    a = _mk_det(depth=3, confirm_bar=100, score=60.0, ci=100)
+    b = _mk_det(depth=3, confirm_bar=100, score=74.0, ci=101)
+    kept2 = _dedup_bt([a, b])
+    assert kept2 == [b], [(d.depth, d.score) for d in kept2]
+
+
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     tests = [(k, v) for k, v in sorted(globals().items())

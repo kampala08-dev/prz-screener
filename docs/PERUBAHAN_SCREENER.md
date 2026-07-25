@@ -196,3 +196,48 @@ fidelity rasio B/C (42%) · confluence × ketatnya zona (28%) · pass strict
 | `run_daily.py` / `run_weekly.py` / `run_h4.py` / `prz_scanner/main.py` | Flag `--strict-bc/--no-strict-bc` |
 | `tests/test_harmonic_book.py` | Baru — 11 test |
 | `README.md` | Tabel rasio V3 + dokumentasi fitur |
+
+---
+
+## 9. Audit Multi-Agen & Hotfix Produksi (25 Juli 2026)
+
+Review menyeluruh 73 agen (6 dimensi + verifikasi adversarial 2 suara per
+temuan): 33 kandidat → 19 terkonfirmasi. Diperbaiki dalam dua batch:
+
+### 9.1 Batch 1 — produksi (CRITICAL/HIGH)
+- **Weekly scan mati total**: scheduler meneruskan `--cleanup` yang tidak
+  didefinisikan parser `run_weekly.py` (argparse exit 2, senyap) — flag
+  ditambahkan + test kontrak scheduler↔runner.
+- **Weekly starved**: loop menit-eksak vs job daily blocking >5 menit —
+  diganti `is_due()` jendela `[jadwal, jadwal+120mnt]` + dedup harian.
+- **Bot token bocor ke log** via URL dalam pesan exception `requests` —
+  kini di-redact (`***TOKEN***`) di satu titik (`_post`).
+- **HTTP 429 drop diam-diam** (fallback hanya cocok "400") — kini patuhi
+  `parameters.retry_after` (maks 2 retry, cap 90 dtk); `send_photo`
+  mengirim bytes agar retry membawa body utuh.
+- `chmod 600 .env` + hardening systemd minimal di `setup_vps.sh`.
+
+### 9.2 Batch 2 — akurasi sinyal
+- **Penanda anti-repaint** ⏳: scan live kini memakai `with_confirm=True`;
+  `Detection.c_confirmed=False` bila pivot C belum punya `depth` bar
+  konfirmasi (snap-forward ke ekstrem yang masih berkembang). Caption
+  Telegram menampilkan peringatan "C belum terkonfirmasi — bisa repaint,
+  di luar populasi backtest". Sinyal tetap dikirim (disclosure, bukan
+  suppress).
+- **Outside bar**: bar yang lolos tes pivot high DAN low sekaligus kini
+  emit SATU pivot yang beralternasi (dulu dua pivot di bar sama → pola
+  leg durasi-0). Ditambah guard `xi<ai<bi<ci` di `scan_points`.
+- **Shark ideal_c 1.414 → 1.929** (titik tengah rentang impuls buku
+  1.618–2.24; nilai lama di luar rentang sah sehingga setiap Shark valid
+  terpenalti dan varian paling-sesuai-buku justru terbuang saat dedup).
+- **Dedup backtest earliest-confirm**: varian zona yang dipertahankan =
+  konfirmasi paling awal (yang pertama bisa di-trade live), bukan skor
+  tertinggi (seleksi memakai informasi masa depan).
+
+### 9.3 Angka backtest pasca-fix (re-run penuh, 362 saham × 5 th)
+Subset quality **Crab+Bat conf≥2: 58.0% win, +0.161R (362 trades)** —
+praktis identik dengan sebelum fix dedup (58.2%, +0.163R): edge nyata,
+bukan artefak bias seleksi. Per pola: Crab 64.4%, Bat 53.2%; stabil
+55–64% di 2021–2025 (terlemah 2026: 50.8%). Shark tetap terlemah (34.5%).
+
+Test suite: 40 → **64** (scheduler 12, telegram 7, harmonic +4, backtest +1).

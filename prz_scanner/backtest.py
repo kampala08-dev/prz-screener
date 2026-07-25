@@ -97,9 +97,19 @@ def _bt_config(base: Optional[Config] = None) -> Config:
 def _dedup_bt(dets: List[Detection]) -> List[Detection]:
     """Collapse the same historical zone found via multiple depth/tol
     passes: same pattern+direction, PRZ mids within 1.5% AND C pivots
-    within 10 bars. Keeps the highest score."""
+    within 10 bars.
+
+    Keeps the EARLIEST-CONFIRMED variant (confirm_bar + depth); skor hanya
+    tie-break. Memilih skor tertinggi lintas depth = seleksi sampel memakai
+    informasi masa depan: varian depth besar terkonfirmasi belakangan,
+    sedangkan trader live sudah masuk lewat alert varian depth kecil yang
+    terkonfirmasi lebih dulu — statistik per-pola/conf jadi bias atribusi
+    terhadap apa yang sebenarnya bisa di-trade."""
+    def _eff_confirm(d: Detection) -> int:
+        know = d.confirm_bar if d.confirm_bar >= 0 else d.ci
+        return know + d.depth
     out: List[Detection] = []
-    for d in sorted(dets, key=lambda x: -x.score):
+    for d in sorted(dets, key=lambda x: (_eff_confirm(x), -x.score)):
         dup = any(
             k.pattern == d.pattern and k.bull == d.bull
             and abs(k.ci - d.ci) <= 10
