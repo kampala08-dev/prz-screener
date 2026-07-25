@@ -37,6 +37,8 @@ def parse_args(argv=None):
                    help="minimal jumlah elemen confluence PRZ (default 0)")
     p.add_argument("--quality", action="store_true",
                    help="preset subset teruji backtest: --only Crab Bat --min-conf 2")
+    p.add_argument("--sentiment", action="store_true",
+                   help="lapisan sentimen MiniMax (berita+disclosure) sbg confluence; butuh MINIMAX_API_KEY di .env")
     p.add_argument("--no-charts", action="store_true")
     p.add_argument("--output", default=None,
                    help="folder output (default: output/daily)")
@@ -119,6 +121,20 @@ def main(argv=None):
         print(f"      filter kualitas ({'+'.join(only) if only else 'semua'}, "
               f"conf>={min_conf}): {before} -> {len(results)} saham")
 
+    # [SENTIMEN] enrichment opsional (MiniMax) — hanya atas hasil yang lolos
+    # (~5-25 saham). Dibungkus try/except: gagal = di-skip, scan tetap jalan.
+    enrichment = {}
+    if args.sentiment and results:
+        print("\n[S] Enrichment sentimen (MiniMax) atas saham lolos...")
+        try:
+            from prz_scanner.sentiment.enrich import enrich_results
+            enrichment = enrich_results(results, log=print)
+            # urutkan tampilan: CONFIRM di atas, CONFLICT di bawah
+            results.sort(key=lambda r: enrichment[r.ticker].priority
+                         if r.ticker in enrichment else 1)
+        except Exception as e:
+            print(f"      [sentimen] layer gagal total, di-skip: {e}")
+
     print("\n[3/4] Menulis summary...")
     df = build_summary(results, cfg.timeframe)
     if not (args.cleanup and args.telegram):
@@ -181,11 +197,17 @@ def main(argv=None):
                 valid_str = "\u2705 valid" if bb.valid else "\u26a0\ufe0f invalid"
                 inside = bb.prz_lo <= last_close <= bb.prz_hi
                 status_disp = "\U0001f4cd INSIDE PRZ" if inside else f"approaching {bb.dist_pct:.1f}% \U0001f53d"
+                sent_line = ""
+                enr = enrichment.get(r.ticker)
+                if enr is not None and enr.tag.value != "NEUTRAL":
+                    sent_line = (f"\n{enr.icon} Sentimen: <b>{enr.tag.value}</b>"
+                                 f" — {html.escape(enr.reason)}")
                 caption = (
                     f"<b>{html.escape(r.ticker)}</b> | Daily | {html.escape(bb.pattern)} | {valid_str}\n"
                     f"PRZ: <code>{bb.prz_lo:.0f} - {bb.prz_hi:.0f}</code>\n"
                     f"Close: <code>{last_close:.0f}</code> | {status_disp}\n"
                     f"Score: <code>{bb.score:.0f}</code> | TP1: <code>{bb.tp1:.0f}</code> | Stop: <code>{bb.stop:.0f}</code>"
+                    f"{sent_line}"
                 )
                 print(f"  [TG] Mengirim {r.ticker}...")
                 ok = tg.send_photo(path, caption)
