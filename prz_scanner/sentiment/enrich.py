@@ -54,8 +54,11 @@ def enrich_results(results: List, scorer: Optional[MiniMaxScorer] = None,
             tag, reason = classify(sent, is_bull=best.bull)
             out[ticker] = Enrichment(sentiment=sent, tag=tag, reason=reason)
             mark = out[ticker].icon or "•"
+            # sent.error WAJIB tampil di log — tanpa ini kegagalan LLM
+            # (key salah, respons terpotong) tak terlihat sama sekali.
+            extra = f" [GAGAL: {sent.error}]" if not sent.ok else ""
             log(f"      [sentimen] {ticker}: {tag.value} {mark} "
-                f"(score {sent.score:+.2f}, {len(heads)} berita)")
+                f"(score {sent.score:+.2f}, {len(heads)} berita){extra}")
         except Exception as e:                      # jangan pernah gagalkan scan
             log(f"      [sentimen] {ticker}: SKIP ({e})")
         time.sleep(pause)

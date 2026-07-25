@@ -22,7 +22,14 @@ def classify(sentiment: Optional[SentimentResult], is_bull: bool = True,
              pos_thr: float = POS_THR, neg_thr: float = NEG_THR,
              min_conf: float = MIN_CONF) -> Tuple[ConfluenceTag, str]:
     """Kembalikan (tag, reason). Aman terhadap sentiment None/kosong/gagal."""
-    if sentiment is None or not sentiment.ok or not sentiment.headlines_used:
+    if sentiment is None:
+        return ConfluenceTag.NEUTRAL, "sepi berita"
+    if not sentiment.ok:
+        # Kegagalan skoring (key invalid, JSON rusak, timeout) TIDAK BOLEH
+        # tersamar sebagai "sepi berita" — dua kondisi itu tampak identik di
+        # log dan membuat MINIMAX_API_KEY salah tak terdeteksi berbulan-bulan.
+        return ConfluenceTag.NEUTRAL, f"skor gagal: {sentiment.error}"
+    if not sentiment.headlines_used:
         return ConfluenceTag.NEUTRAL, "sepi berita"
     if sentiment.confidence < min_conf and not sentiment.has_material_event:
         return ConfluenceTag.NEUTRAL, f"low-conf ({sentiment.label})"
