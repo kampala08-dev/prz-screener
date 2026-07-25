@@ -310,6 +310,111 @@ def test_pick_top_forces_best_buy():
 
 
 # ---------------------------------------------------------------------------
+# audit 2026-07-25: outside bar, guard bar monoton, Shark ideal_c,
+# penanda C belum terkonfirmasi
+# ---------------------------------------------------------------------------
+def test_outside_bar_emits_single_pivot():
+    """Outside bar yang mendominasi KEDUA jendela +/-depth dulu diemit
+    sebagai pivot high DAN low pada bar yang sama (dua `if` terpisah) ->
+    duplikat bar & leg XABCD berdurasi 0. Kini emit SATU yang beralternasi
+    dengan pivot terakhir."""
+    n = 30
+    base_h = np.full(n, 105.0)
+    base_l = np.full(n, 104.0)
+
+    # kasus 1: pivot sebelumnya LOW -> outside bar diemit sebagai HIGH
+    h1, l1 = base_h.copy(), base_l.copy()
+    l1[5] = 95.0                     # pivot low
+    h1[12], l1[12] = 120.0, 93.0     # outside bar (dominasi bars 9-15)
+    l1[18] = 94.0                    # pivot low berikutnya
+    h1[24] = 119.0                   # pivot high berikutnya
+    pts = compute_zigzag(h1, l1, depth=3, snap=False)
+    bars = [b for _, b, _ in pts]
+    assert len(set(bars)) == len(bars), f"duplikat bar: {bars}"
+    at12 = [(p, ih) for p, b, ih in pts if b == 12]
+    assert at12 == [(120.0, True)], at12
+
+    # kasus 2: pivot sebelumnya HIGH -> outside bar diemit sebagai LOW
+    h2, l2 = base_h.copy(), base_l.copy()
+    h2[5] = 118.0
+    h2[12], l2[12] = 120.0, 93.0
+    h2[18] = 119.0
+    l2[24] = 94.0
+    pts2 = compute_zigzag(h2, l2, depth=3, snap=False)
+    bars2 = [b for _, b, _ in pts2]
+    assert len(set(bars2)) == len(bars2), f"duplikat bar: {bars2}"
+    at12b = [(p, ih) for p, b, ih in pts2 if b == 12]
+    assert at12b == [(93.0, False)], at12b
+
+
+def test_scan_points_rejects_nonmonotonic_bars():
+    """[GUARD] Window dengan bar tidak monoton naik ketat (A dan B pada bar
+    yang sama — artefak outside bar) tidak boleh menghasilkan deteksi,
+    meski rasio harganya membentuk Bat ideal."""
+    points = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
+              (1055.0, 20, False), (1082.81, 40, True)]   # bi == ai
+    high, low, close = _flat_tail_arrays()
+    dets = scan_points("TST", points, high, low, close,
+                       tol_val=5.0, is_strict=True, cfg=_cfg())
+    assert dets == [], _names(dets)
+
+
+def test_shark_score_prefers_book_center_impulse():
+    """ideal_c Shark = 1.929 (titik tengah rentang buku 1.618-2.24).
+    Impuls dekat tengah rentang wajib skor tertinggi; jangkar lama 1.414
+    (di luar rentang sah) membalik urutan — makin sesuai buku makin
+    terpenalti."""
+    high, low, close = _flat_tail_arrays()
+
+    def shark_score(bcp_target):
+        cP = 1050.0 + bcp_target * 50.0
+        pts = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
+               (1050.0, 30, False), (cP, 40, True)]
+        dets = scan_points("TST", pts, high, low, close,
+                           tol_val=5.0, is_strict=True, cfg=_cfg())
+        s = [d for d in dets if d.pattern == "Shark" and d.bull]
+        assert s, f"Shark bcp={bcp_target} harus terdeteksi"
+        return s[0].score
+
+    assert shark_score(2.0) > shark_score(1.65)
+    assert shark_score(2.0) > shark_score(2.20)
+
+
+def test_live_scan_flags_unconfirmed_c():
+    """[anti-repaint] scan_stock menandai c_confirmed=False bila pivot C
+    hasil snap-forward belum punya `depth` bar konfirmasi di kanannya —
+    kelas sinyal yang bisa repaint & berada di luar populasi backtest."""
+    import pandas as pd
+    from prz_scanner.scanner import scan_stock
+
+    def _mk_df(n):
+        high = np.full(n, 1052.0)
+        low = np.full(n, 1048.0)
+        close = np.full(n, 1050.0)
+        high[4] = 1055.0      # pivot pembuka (agar total pivot >= 5)
+        low[10] = 1000.0      # X
+        high[20] = 1100.0     # A
+        low[30] = 1038.2      # B = 0.618 XA -> Gartley
+        high[36] = 1070.0     # C sementara (raw pivot terkonfirmasi)
+        high[43] = 1076.4     # higher-high = 0.618 dari AB (bar TETAP 43;
+        return pd.DataFrame({  # n yang menentukan sudah/belum konfirmasi
+            "High": high, "Low": low, "Close": close})
+
+    cfg = _cfg(depths=[3], proximity_pct=25.0)
+
+    # n=45: ekstrem di bar 43 belum punya 3 bar kanan -> snap-forward
+    # memindahkan C ke sana -> WAJIB ditandai belum terkonfirmasi
+    res = scan_stock("TST", _mk_df(45), cfg)
+    assert res.passed and res.best_buy is not None
+    assert res.best_buy.c_confirmed is False, vars(res.best_buy)
+
+    # n=50: ekstrem yang sama kini punya >=3 bar kanan -> terkonfirmasi
+    res2 = scan_stock("TST", _mk_df(50), cfg)
+    assert res2.passed and res2.best_buy is not None
+    assert res2.best_buy.c_confirmed is True, vars(res2.best_buy)
+
+
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     tests = [(k, v) for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

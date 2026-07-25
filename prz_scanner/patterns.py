@@ -106,6 +106,12 @@ class Detection:
     # earliest bar the XABC window was live-knowable (backtest confirmation;
     # -1 when the zigzag was built without with_confirm)
     confirm_bar: int = -1
+    # [DEVIATION anti-repaint] False bila pivot C belum punya `depth` bar
+    # konfirmasi di kanannya saat scan — C hasil snap-forward ke ekstrem yang
+    # masih berkembang. Sinyal seperti ini bisa repaint (C/PRZ/stop bergeser)
+    # dan berada DI LUAR populasi trade backtest (yang mengunci entry ke
+    # confirm_bar + depth). Diisi scanner live; jalur backtest mengabaikannya.
+    c_confirmed: bool = True
     # validity (przStatus): 0 active, 1 confirmed-reversal, 2 invalid, 3 flip
     status: int = 0
     first_touch_idx: int = -1
@@ -387,6 +393,12 @@ def scan_points(ticker: str, points: List[ZPoint],
         if not (t0 != t1 and t1 != t2 and t2 != t3):
             continue
 
+        # [GUARD] bar indices wajib monoton naik ketat. Duplikat bar (mis.
+        # outside bar degenerate yang lolos sebagai pivot high+low sekaligus)
+        # melahirkan leg berdurasi 0 bar — pola sintetis dari satu candle.
+        if not (xi < ai < bi < ci):
+            continue
+
         xa = abs(aP - xP)
         ab = abs(bP - aP)
         bc = abs(cP - bP)
@@ -533,7 +545,14 @@ def scan_points(ticker: str, points: List[ZPoint],
             su = aP - 0.886 * xa if bull else aP + 0.886 * xa
             sl2 = aP - 1.13 * xa if bull else aP + 1.13 * xa
             shi = max(su, sl2); slo = min(su, sl2)
-            emit("Shark", "red", None, None, 0.5, 1.414, 1.0,
+            # ideal_c (jangkar fidelity skor) = 1.929, titik tengah rentang
+            # impuls buku 1.618-2.24: V3 memberi RENTANG (tiga kali) tanpa
+            # satu nilai ideal, jadi midpoint = jangkar netral. Nilai lama
+            # 1.414 (sisa gate Pine 1.13-1.618) berada DI LUAR rentang sah,
+            # sehingga SETIAP Shark valid terpenalti fidelity dan makin
+            # sesuai buku makin besar penaltinya (cr=2.0 -> fc 0.59) —
+            # dedup/top-2 sistematis memilih varian impuls terlemah.
+            emit("Shark", "red", None, None, 0.5, 1.929, 1.0,
                  prz_hi=shi, prz_lo=slo)
 
     return dets

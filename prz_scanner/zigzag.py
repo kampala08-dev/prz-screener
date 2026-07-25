@@ -88,10 +88,21 @@ def compute_zigzag(high: np.ndarray, low: np.ndarray, depth: int,
         is_ph = _pivot_high(high, i, depth)
         is_pl = _pivot_low(low, i, depth)
 
-        # A bar can't be both; if degenerate, prefer high (Pine evals ph first).
-        if is_ph:
+        # Outside bar BISA lolos kedua tes (high tertinggi DAN low terendah
+        # dalam +/-depth, mis. ARA lalu ARB intraday). Dulu dua `if` terpisah
+        # mengemit pivot high DAN low pada bar yang sama — melanggar jaminan
+        # "strictly increasing bar indices" dan melahirkan pola XABCD dengan
+        # leg berdurasi 0 bar. Emit SATU saja: yang beralternasi dengan pivot
+        # terakhir (menjaga struktur zigzag); tanpa pivot sebelumnya, prefer
+        # high (Pine evals ph first).
+        if is_ph and is_pl:
+            if pts and pts[-1][2]:              # terakhir high -> emit low
+                _merge(pts, low[i], i, False)
+            else:
+                _merge(pts, high[i], i, True)
+        elif is_ph:
             _merge(pts, high[i], i, True)
-        if is_pl:
+        elif is_pl:
             _merge(pts, low[i], i, False)
 
     # Raw confirmed pivot bars, captured BEFORE snapping (see with_confirm).
