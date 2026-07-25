@@ -41,6 +41,11 @@ def parse_args(argv=None):
                    help="saat --telegram: kirim PNG saja, skip pesan teks summary")
     p.add_argument("--tg-token", default=None)
     p.add_argument("--tg-chat", default=None)
+    # WAJIB ada: scheduler.py selalu meneruskan --cleanup ke semua runner.
+    # Body main() membaca args.cleanup — tanpa definisi ini, argparse exit 2
+    # (flag tak dikenal) dan weekly scan tidak pernah jalan dari scheduler.
+    p.add_argument("--cleanup", action="store_true",
+                   help="hapus PNG & skip simpan summary ke disk setelah kirim ke Telegram")
     return p.parse_args(argv)
 
 

@@ -94,6 +94,28 @@ JOBS = [
     ({4},             17, 5, "Weekly", job_weekly),  # Jumat 17:05 WIB
 ]
 
+# Jendela toleransi keterlambatan. Job dianggap "due" dari jam:menit jadwal
+# sampai GRACE sesudahnya. Ini KRITIS untuk weekly Jumat 17:05: job daily
+# 17:00 blocking (subprocess.run sinkron) >5 menit, sehingga cek menit-eksak
+# `t.minute == mm` selalu meleset dan weekly tidak pernah jalan (silent miss).
+# Efek samping yang disengaja: restart service <= GRACE setelah jadwal akan
+# menjalankan scan yang terlewat (catch-up), lebih dari itu di-skip.
+GRACE = timedelta(minutes=120)
+
+
+def is_due(t: datetime, days, hh: int, mm: int, last_run_date) -> bool:
+    """True bila job jatuh tempo pada waktu WIB `t` dan belum jalan hari ini.
+
+    Due = weekday cocok, t di [jadwal, jadwal+GRACE], dan last_run_date
+    bukan tanggal hari ini (dedup harian).
+    """
+    if t.weekday() not in days:
+        return False
+    if last_run_date == t.date():
+        return False
+    sched = t.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    return sched <= t <= sched + GRACE
+
 # ── Main loop ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -110,8 +132,9 @@ if __name__ == "__main__":
     while True:
         t = now_wib()
         for i, (days, hh, mm, label, fn) in enumerate(JOBS):
-            if t.weekday() in days and t.hour == hh and t.minute == mm:
-                if last_run.get(i) != t.date():
-                    last_run[i] = t.date()   # cegah dobel dalam menit yang sama
-                    fn()
+            if is_due(t, days, hh, mm, last_run.get(i)):
+                last_run[i] = t.date()   # dedup: sekali per hari per job
+                fn()                     # blocking; job berikutnya dicek pada
+                                         # iterasi loop baru dgn t yang segar,
+                                         # tetap due selama masih dalam GRACE
         time.sleep(20)   # cek ~3x/menit -> pasti kena menit target
