@@ -21,12 +21,14 @@ scheduler.py`. Kamu tinggal membuat project + mengisi 3–4 variabel.
    |----------|-------|:-----:|
    | `TELEGRAM_BOT_TOKEN` | token @PRZHarmonic_Bot (dari @BotFather) | ✅ |
    | `TELEGRAM_CHAT_ID` | `-1004409180438` (channel XAU-Harmonic) | ✅ |
-   | `TZ` | `Asia/Jakarta` | ✅ (agar 18:00 = WIB) |
+   | `TZ` | `Asia/Jakarta` | opsional (hanya timestamp log) |
    | `MPLCONFIGDIR` | `/tmp/mpl` | opsional (cache matplotlib) |
 
-   > **PENTING soal `TZ`**: container Railway default UTC. Tanpa
-   > `TZ=Asia/Jakarta`, jadwal 18:00 akan jalan jam 18:00 **UTC** = 01:00
-   > WIB dini hari. Variabel ini yang membuat jadwalnya benar.
+   > **Timezone**: `scheduler.py` menghitung WIB secara eksplisit (UTC+7),
+   > jadi jadwal 18:00 WIB selalu benar **tanpa bergantung pada `TZ`** —
+   > penting karena container Railway/Nixpacks tidak punya database zoneinfo
+   > (TZ=Asia/Jakarta diam-diam jatuh ke UTC). `TZ` hanya memengaruhi tampilan
+   > timestamp di log, bukan waktu jadwalnya.
 
 5. **Deploy**. Cek tab **Deployments → Logs**, harus muncul
    `PRZ Scheduler started.` dan `Daily scan: Senin-Jumat 18:00 WIB`.

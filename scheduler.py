@@ -18,16 +18,19 @@ Atau gunakan crontab (lihat crontab.example) untuk alternatif yang lebih ringan.
 import subprocess
 import sys
 import os
+import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
-try:
-    import schedule
-    import time
-except ImportError:
-    print("[ERROR] Library 'schedule' belum terinstall.")
-    print("        Jalankan: pip install schedule")
-    sys.exit(1)
+# WIB eksplisit (UTC+7). TIDAK bergantung pada timezone sistem / tzdata —
+# banyak container (mis. Railway/Nixpacks) tidak punya database zoneinfo,
+# sehingga TZ=Asia/Jakarta diam-diam jatuh ke UTC dan jadwal meleset 7 jam.
+# Menghitung WIB dari UTC memastikan 18:00 selalu = 18:00 WIB di mana pun.
+WIB = timezone(timedelta(hours=7), "WIB")
+
+
+def now_wib() -> datetime:
+    return datetime.now(timezone.utc).astimezone(WIB)
 
 # ── Setup logging ────────────────────────────────────────────────────────────
 
@@ -82,32 +85,31 @@ def job_weekly():
     _run("run_weekly.py", "Weekly Scan")
 
 
-# ── Schedule ─────────────────────────────────────────────────────────────────
-# Waktu dalam LOCAL TIME VPS.
-# Pastikan timezone VPS = Asia/Jakarta (WIB, UTC+7).
-# Cek: timedatectl   atau   date
-# Set : sudo timedatectl set-timezone Asia/Jakarta
-
-DAILY_TIME  = "18:00"   # Senin-Jumat
-WEEKLY_TIME = "18:05"   # Jumat saja (setelah daily selesai)
-
-schedule.every().monday.at(DAILY_TIME).do(job_daily)
-schedule.every().tuesday.at(DAILY_TIME).do(job_daily)
-schedule.every().wednesday.at(DAILY_TIME).do(job_daily)
-schedule.every().thursday.at(DAILY_TIME).do(job_daily)
-schedule.every().friday.at(DAILY_TIME).do(job_daily)
-schedule.every().friday.at(WEEKLY_TIME).do(job_weekly)
+# ── Schedule (WIB eksplisit) ─────────────────────────────────────────────────
+# Tiap job: (hari_WIB, jam, menit, fungsi). Monday=0 .. Sunday=6.
+JOBS = [
+    ({0, 1, 2, 3, 4}, 18, 0, "Daily",  job_daily),   # Senin-Jumat 18:00 WIB
+    ({4},             18, 5, "Weekly", job_weekly),  # Jumat 18:05 WIB
+]
 
 # ── Main loop ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    t0 = now_wib()
     log.info("PRZ Scheduler started.")
-    log.info(f"  Daily  scan: Senin-Jumat {DAILY_TIME} WIB")
-    log.info(f"  Weekly scan: Jumat       {WEEKLY_TIME} WIB")
+    log.info(f"  Sekarang   : {t0:%Y-%m-%d %H:%M:%S} WIB "
+             f"({datetime.now(timezone.utc):%H:%M} UTC)")
+    log.info("  Daily  scan: Senin-Jumat 18:00 WIB")
+    log.info("  Weekly scan: Jumat       18:05 WIB")
     log.info(f"  Python: {PYTHON}")
-    log.info(f"  Base dir: {BASE_DIR}")
-    log.info("Waiting for scheduled jobs... (Ctrl+C to stop)")
+    log.info("Menunggu jadwal (WIB dihitung eksplisit UTC+7)... Ctrl+C untuk stop")
 
+    last_run = {}   # index job -> tanggal WIB terakhir dijalankan
     while True:
-        schedule.run_pending()
-        time.sleep(30)
+        t = now_wib()
+        for i, (days, hh, mm, label, fn) in enumerate(JOBS):
+            if t.weekday() in days and t.hour == hh and t.minute == mm:
+                if last_run.get(i) != t.date():
+                    last_run[i] = t.date()   # cegah dobel dalam menit yang sama
+                    fn()
+        time.sleep(20)   # cek ~3x/menit -> pasti kena menit target
