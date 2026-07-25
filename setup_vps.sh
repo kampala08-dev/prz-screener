@@ -57,6 +57,9 @@ if [ ! -f .env ]; then
 else
     echo "      .env sudah ada, skip."
 fi
+# .env berisi bot token & API key — jangan world-readable (umask default
+# menghasilkan 644, terbaca semua user lokal di VPS).
+chmod 600 .env
 
 # 5. Timezone (VPS punya tzdata; scheduler juga hitung WIB eksplisit)
 echo "[5/8] Set timezone Asia/Jakarta (WIB)..."
@@ -83,6 +86,9 @@ ExecStart=$REPO_DIR/venv/bin/python $REPO_DIR/scheduler.py
 Restart=always
 RestartSec=30
 Environment=PYTHONUNBUFFERED=1
+# Hardening minimal (murah & aman utk workload ini)
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
@@ -112,5 +118,5 @@ echo "  Cek status / log:"
 echo "       systemctl status prz-screener"
 echo "       journalctl -u prz-screener -f"
 echo ""
-echo "  (Scheduler kirim scan Senin-Jumat 18:00 WIB, Weekly Jumat 18:05 WIB.)"
+echo "  (Scheduler: Daily Senin-Jumat 12:00 & 17:00 WIB, Weekly Jumat 17:05 WIB.)"
 echo ""
