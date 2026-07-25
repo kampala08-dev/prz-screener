@@ -84,29 +84,30 @@ didokumentasikan di `docs/PERUBAHAN_SCREENER.md` dan `output/backtest/`.
 bash setup_vps.sh
 ```
 
-Script ini akan: install dependencies, clone repo, setup .env, set timezone WIB, buat folder.
+Script ini: install dependencies, clone repo (dari fork), buat venv, setup
+.env, set timezone WIB, buat folder, **dan pasang systemd service**
+(auto-start saat boot + auto-restart kalau crash).
 
 ### 2. Edit `.env`
 
 ```bash
-nano .env
+nano ~/prz-screener/.env
 ```
 
 ```
 TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_CHAT_ID=-1001234567890
+TELEGRAM_CHAT_ID=-1004409180438
 ```
 
-### 3a. Jalankan via Python Scheduler (Recommended)
+### 3a. Nyalakan scheduler via systemd (Recommended)
 
 ```bash
-source venv/bin/activate
-screen -S prz
-python scheduler.py
-# Ctrl+A, D untuk detach
+sudo systemctl enable --now prz-screener   # start + auto-start saat boot
+systemctl status prz-screener              # cek status
+journalctl -u prz-screener -f              # pantau log realtime
 ```
 
-Jadwal otomatis:
+Jadwal otomatis (WIB dihitung eksplisit UTC+7, tak bergantung tzdata):
 - **Daily**: Senin–Jumat jam 18:00 WIB
 - **Weekly**: Jumat jam 18:05 WIB
 
