@@ -14,17 +14,19 @@ import random
 import logging
 from typing import Dict, Optional
 import pandas as pd
-import subprocess
-import sys
 
-# Auto-install tvDatafeed jika belum ada (penting karena ini dari github)
+# tvDatafeed dari GitHub, DI-PIN ke commit di requirements.txt. Sengaja
+# TANPA auto-pip-install saat import: proses produksi (VPS, env berisi
+# bot token & API key) tidak boleh mengeksekusi installer dari jaringan —
+# fork yang berubah/ter-compromise = eksekusi kode arbitrer di jalur scan
+# (supply-chain risk, temuan audit 2026-07-25). Bila hilang: fail cepat
+# dengan instruksi jelas.
 try:
     from tvDatafeed import TvDatafeed, Interval
-except ImportError:
-    print("[SETUP] Menginstal tvDatafeed dari GitHub...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", 
-                           "git+https://github.com/rongardF/tvdatafeed.git", "--quiet"])
-    from tvDatafeed import TvDatafeed, Interval
+except ImportError as e:
+    raise ImportError(
+        "tvDatafeed belum terpasang. Jalankan: pip install -r requirements.txt"
+    ) from e
 
 # Suppress tvDatafeed's "nologin" warnings
 logging.getLogger("tvDatafeed.main").setLevel(logging.CRITICAL)

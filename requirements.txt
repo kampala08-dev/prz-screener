@@ -4,4 +4,6 @@ mplfinance>=0.12.10b0
 matplotlib>=3.7
 requests>=2.31
 python-dotenv>=1.0
-tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git
+# Di-pin ke commit yang tervalidasi live (laptop + VPS 2026-07) — fork
+# git tanpa pin = supply-chain risk (kode berubah tanpa review).
+tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git@e6f6aaa7de439ac6e454d9b26d2760ded8dc4923

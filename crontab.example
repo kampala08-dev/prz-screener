@@ -6,14 +6,20 @@
 #   crontab -e
 #   (paste baris di bawah, sesuaikan PATH jika perlu)
 #
-# PENTING: Pastikan timezone VPS = Asia/Jakarta:
-#   sudo timedatectl set-timezone Asia/Jakarta
+# PENTING:
+#   1. Pastikan timezone VPS = Asia/Jakarta:
+#        sudo timedatectl set-timezone Asia/Jakarta
+#   2. WAJIB pakai python dari venv ($HOME/prz-screener/venv/bin/python).
+#      `python3` sistem TIDAK punya dependency (requests, pandas, tvdatafeed)
+#      -> ImportError setiap run, dan karena error hanya masuk file log,
+#      Telegram diam tanpa indikasi apa pun (silent failure).
 #
+# Jadwal disamakan dengan scheduler.py:
+#   Daily  : Senin-Jumat 12:00 & 17:00 WIB (dengan anotasi sentimen)
+#   Weekly : Jumat 17:05 WIB
 # Format: menit jam hari bulan hari-minggu perintah
 # hari-minggu: 1=Senin, 2=Selasa, ..., 5=Jumat
 
-# Daily scan - Senin s.d. Jumat jam 18:00 WIB
-0 18 * * 1-5 cd ~/prz-screener && python3 run_daily.py --telegram --images-only >> logs/daily.log 2>&1
-
-# Weekly scan - Jumat jam 18:05 WIB (setelah daily selesai)
-5 18 * * 5   cd ~/prz-screener && python3 run_weekly.py --telegram --images-only >> logs/weekly.log 2>&1
+0 12 * * 1-5 cd $HOME/prz-screener && $HOME/prz-screener/venv/bin/python run_daily.py --telegram --images-only --cleanup --sentiment >> logs/daily.log 2>&1
+0 17 * * 1-5 cd $HOME/prz-screener && $HOME/prz-screener/venv/bin/python run_daily.py --telegram --images-only --cleanup --sentiment >> logs/daily.log 2>&1
+5 17 * * 5   cd $HOME/prz-screener && $HOME/prz-screener/venv/bin/python run_weekly.py --telegram --images-only --cleanup >> logs/weekly.log 2>&1

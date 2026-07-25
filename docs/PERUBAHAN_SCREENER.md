@@ -241,3 +241,28 @@ bukan artefak bias seleksi. Per pola: Crab 64.4%, Bat 53.2%; stabil
 55–64% di 2021–2025 (terlemah 2026: 50.8%). Shark tetap terlemah (34.5%).
 
 Test suite: 40 → **64** (scheduler 12, telegram 7, harmonic +4, backtest +1).
+
+### 9.4 Batch 3 — robustness & supply chain
+- **Error sentimen tidak lagi tersamar "sepi berita"**: kegagalan skoring
+  (key invalid, JSON rusak, timeout) kini ber-reason `skor gagal: <error>`
+  dan tampil `[GAGAL: ...]` di log; respons MiniMax HTTP-200 dengan error
+  `base_resp` (mis. 1004 key invalid) dideteksi eksplisit.
+- **Anti prompt-injection**: judul/sumber berita disanitasi (`_clean_title`
+  — newline & tag `[DISCLOSURE IDX]` palsu dibuang, panjang dibatasi);
+  system prompt menegaskan tag disclosure hanya sah dari sistem.
+- **Respons reasoning terpotong**: blok `<think>` tanpa penutup dibuang
+  seluruhnya — draft JSON di dalam reasoning tak pernah dipakai sebagai
+  jawaban.
+- **Exit code kegagalan Telegram**: run_daily/run_weekly/run_h4 kini
+  `exit 3` bila pengiriman gagal total — scheduler mencatat FAIL di
+  journalctl (dulu selalu exit 0, kegagalan tak terlihat).
+- **run_h4 paritas scheduler**: `--images-only` ditambahkan, `--cleanup`
+  benar-benar dipakai (dulu no-op), `sent` hanya dihitung saat kirim
+  sukses. Test kontrak flag kini mencakup ketiga runner.
+- **Supply chain**: `tvdatafeed` di-pin ke commit tervalidasi
+  (`e6f6aaa`); auto-`pip install` saat import di `data_fetch.py` DIHAPUS
+  (eksekusi installer dari jaringan di proses ber-secret = vektor RCE).
+- **crontab.example**: pakai python venv (bukan `python3` sistem yang
+  ImportError senyap) + jadwal disamakan (12:00/17:00, Jumat 17:05).
+
+Test suite: 64 → **69** (sentimen +4, kontrak run_h4 +1).
