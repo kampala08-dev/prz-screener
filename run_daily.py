@@ -210,12 +210,19 @@ def main(argv=None):
                 if enr is not None and enr.tag.value != "NEUTRAL":
                     sent_line = (f"\n{enr.icon} Sentimen: <b>{enr.tag.value}</b>"
                                  f" — {html.escape(enr.reason)}")
+                # [anti-repaint] pivot C belum terkonfirmasi (belum `depth`
+                # bar di kanannya): pola bisa repaint & di luar populasi
+                # backtest — tampilkan peringatan, jangan disembunyikan.
+                unconf_line = ""
+                if not bb.c_confirmed:
+                    unconf_line = ("\n⏳ <i>C belum terkonfirmasi — "
+                                   "bisa repaint, di luar populasi backtest</i>")
                 caption = (
                     f"<b>{html.escape(r.ticker)}</b> | Daily | {html.escape(bb.pattern)} | {valid_str}\n"
                     f"PRZ: <code>{bb.prz_lo:.0f} - {bb.prz_hi:.0f}</code>\n"
                     f"Close: <code>{last_close:.0f}</code> | {status_disp}\n"
                     f"Score: <code>{bb.score:.0f}</code> | TP1: <code>{bb.tp1:.0f}</code> | Stop: <code>{bb.stop:.0f}</code>"
-                    f"{sent_line}"
+                    f"{unconf_line}{sent_line}"
                 )
                 print(f"  [TG] Mengirim {r.ticker}...")
                 ok = tg.send_photo(path, caption)

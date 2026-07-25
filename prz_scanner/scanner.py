@@ -100,13 +100,24 @@ def scan_stock(ticker: str, df: pd.DataFrame, cfg: Config,
     if cfg.enable_loose:
         tol_passes.append((cfg.tol_loose, False))
 
+    n_bars = len(high)
     for depth in cfg.depths:
-        pts = compute_zigzag(high, low, depth)
+        # with_confirm=True: pivot identik dgn mode biasa, tapi tiap pivot
+        # membawa know_bar (bar paling awal keberadaannya terdeteksi di bawah
+        # aturan raw symmetric-window) -> confirm_bar pada Detection menjadi
+        # know-bar sejati, bukan sekadar bar pivot hasil snap.
+        pts = compute_zigzag(high, low, depth, with_confirm=True)
         for tol_val, is_strict in tol_passes:
             found = scan_points(ticker, pts, high, low, close,
                                 tol_val, is_strict, cfg)
             for d in found:
                 d.depth = depth
+                # [anti-repaint] C terkonfirmasi hanya bila know-bar window
+                # (= know-bar C, pivot terakhir) sudah punya `depth` bar di
+                # kanannya. C hasil snap-forward ke ekstrem yang masih
+                # berkembang -> False: pola bisa repaint dan berada di luar
+                # populasi backtest (yang entry setelah confirm_bar+depth).
+                d.c_confirmed = d.confirm_bar + depth <= n_bars - 1
             dets.extend(found)
 
     dets = _dedup(dets)
@@ -144,8 +155,10 @@ def scan_stock(ticker: str, df: pd.DataFrame, cfg: Config,
 
 
 # Backtest-proven signal subset (5y walk-forward, 362 saham; lihat
-# docs/PERUBAHAN_SCREENER.md): Crab 63.9% & Bat 53.8% win; gabungan
-# dengan confluence >=2 -> 58.2% win, +0.163R (bertahan di 2024+).
+# docs/PERUBAHAN_SCREENER.md): Crab 64.4% & Bat 53.2% win; gabungan
+# dengan confluence >=2 -> 58.0% win, +0.161R atas 362 trades (angka
+# re-run 2026-07-25 setelah dedup earliest-confirm — bias seleksi-skor
+# dihapus, edge bertahan; stabil 55-64% di 2021-2025, terlemah 2026 50.8%).
 QUALITY_PATTERNS = ("Crab", "Bat")
 QUALITY_MIN_CONF = 2
 

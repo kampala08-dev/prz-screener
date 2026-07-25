@@ -180,11 +180,18 @@ def main(argv=None):
                 valid_str = "\u2705 valid" if bb.valid else "\u26a0\ufe0f invalid"
                 inside = bb.prz_lo <= last_close <= bb.prz_hi
                 status_disp = "\U0001f4cd INSIDE PRZ" if inside else f"approaching {bb.dist_pct:.1f}% \U0001f53d"
+                # [anti-repaint] lihat run_daily.py — peringatan C belum
+                # terkonfirmasi (pola bisa repaint, di luar populasi backtest)
+                unconf_line = ""
+                if not bb.c_confirmed:
+                    unconf_line = ("\n⏳ <i>C belum terkonfirmasi — "
+                                   "bisa repaint, di luar populasi backtest</i>")
                 caption = (
                     f"<b>{html.escape(r.ticker)}</b> | Weekly | {html.escape(bb.pattern)} | {valid_str}\n"
                     f"PRZ: <code>{bb.prz_lo:.0f} - {bb.prz_hi:.0f}</code>\n"
                     f"Close: <code>{last_close:.0f}</code> | {status_disp}\n"
                     f"Score: <code>{bb.score:.0f}</code> | TP1: <code>{bb.tp1:.0f}</code> | Stop: <code>{bb.stop:.0f}</code>"
+                    f"{unconf_line}"
                 )
                 print(f"  [TG] Mengirim {r.ticker}...")
                 ok = tg.send_photo(path, caption)
