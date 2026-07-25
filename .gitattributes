@@ -1,0 +1,4 @@
+# Paksa line-ending LF untuk skrip yang dijalankan di Linux/VPS,
+# agar tidak rusak saat di-commit dari Windows (CRLF -> error $'\r').
+*.sh text eol=lf
+*.py text eol=lf
