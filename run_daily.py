@@ -79,6 +79,14 @@ def main(argv=None):
     args = parse_args(argv)
     cfg = build_config(args)
 
+    # Load .env lebih awal supaya SEMUA yang baca env (sentimen MiniMax +
+    # Telegram) memakai .env. override=True: .env menang atas env var shell.
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+    except ImportError:
+        pass
+
     print("=" * 60)
     print("  PRZ Buy Zone Scanner  -  Daily (1d) Timeframe")
     print("=" * 60)
