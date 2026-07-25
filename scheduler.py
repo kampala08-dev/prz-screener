@@ -74,10 +74,11 @@ def _run(script: str, label: str, extra_args=()):
 
 
 def job_daily():
-    # Kirim SEMUA pola yang mendekati/di dalam PRZ (permintaan Rio).
-    # Tambahkan "--quality" di extra_args untuk kembali ke subset teruji
-    # backtest (Crab+Bat conf>=2 — 58% win, +0.16R).
-    _run("run_daily.py", "Daily Scan")
+    # Semua pola yang mendekati/di dalam PRZ + anotasi sentimen MiniMax
+    # (confluence CONFIRM/CONFLICT). --sentiment butuh MINIMAX_API_KEY di
+    # .env; bila key kosong, layer sentimen otomatis di-skip (scan tetap
+    # jalan). Tambah "--quality" utk subset teruji backtest.
+    _run("run_daily.py", "Daily Scan", extra_args=("--sentiment",))
 
 
 def job_weekly():
