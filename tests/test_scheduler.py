@@ -111,6 +111,14 @@ def test_run_weekly_menerima_flag_scheduler():
     assert a.telegram and a.images_only and a.cleanup
 
 
+def test_run_h4_menerima_flag_scheduler():
+    # run_h4 dulu tidak punya --images-only (drift kembar bug run_weekly) —
+    # kontrak ini menjaga SEMUA runner kompatibel dgn scheduler._run.
+    import run_h4
+    a = run_h4.parse_args(_SCHEDULER_FLAGS)
+    assert a.telegram and a.images_only and a.cleanup
+
+
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     tests = [(k, v) for k, v in sorted(globals().items())

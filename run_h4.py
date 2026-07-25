@@ -42,6 +42,12 @@ def parse_args(argv=None):
                    help="folder output (default: output/h4)")
     p.add_argument("--telegram", action="store_true",
                    help="kirim hasil ke grup Telegram (butuh .env dengan TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID)")
+    # Paritas flag dengan run_daily/run_weekly: scheduler._run meneruskan
+    # "--telegram --images-only --cleanup" ke SEMUA runner (test kontrak di
+    # tests/test_scheduler.py) — tanpa --images-only, run_h4 exit 2 persis
+    # seperti bug run_weekly yang mematikan weekly scan.
+    p.add_argument("--images-only", action="store_true",
+                   help="saat --telegram: kirim PNG saja, skip pesan teks summary")
     p.add_argument("--tg-token", default=None, help="override Telegram bot token")
     p.add_argument("--tg-chat", default=None, help="override Telegram chat_id")
     p.add_argument("--cleanup", action="store_true",
@@ -118,9 +124,12 @@ def main(argv=None):
 
     print("\n[3/4] Menulis summary...")
     df = build_summary(results, cfg.timeframe)
-    csv_path, txt_path = write_summary(df, cfg.output_dir)
-    print(f"      -> {csv_path}")
-    print(f"      -> {txt_path}")
+    if not (args.cleanup and args.telegram):
+        csv_path, txt_path = write_summary(df, cfg.output_dir)
+        print(f"      -> {csv_path}")
+        print(f"      -> {txt_path}")
+    else:
+        print("      (--cleanup aktif: summary tidak disimpan ke disk)")
     if not df.empty:
         print("\n" + df.to_string(index=False) + "\n")
     else:
@@ -145,22 +154,32 @@ def main(argv=None):
         print("[4/4] Chart di-skip (--no-charts)")
 
     # ---- Telegram notification ----
+    tg_failed_total = False
     if args.telegram:
         print("\n[TG] Mengirim hasil ke Telegram...")
         try:
             from prz_scanner.telegram_notify import TelegramSender
+            import time as _time
             tg = TelegramSender(
                 token=args.tg_token or None,
                 chat_id=args.tg_chat or None,
             )
-            tg.send_summary(df, cfg.timeframe, total_scanned=len(data))
-            import time as _time
+            if not args.images_only:
+                tg.send_summary(df, cfg.timeframe, total_scanned=len(data))
+                _time.sleep(0.5)
+            elif not df.empty:
+                tg.send_message(
+                    f"<b>PRZ H4 Scan</b> - {len(results)} saham mendekati PRZ BUY zone"
+                )
+                _time.sleep(0.5)
             sent = 0
+            attempted = 0
             for r in results:
                 path = chart_paths.get(r.ticker)
                 if not path or not os.path.exists(path):
                     print(f"  [TG] Chart {r.ticker} tidak ada, skip.")
                     continue
+                attempted += 1
                 bb = r.best_buy
                 last_close = r.realtime_close if r.realtime_close is not None else float(r.df["Close"].iloc[-1])
                 valid_str = "\u2705 valid" if bb.valid else "\u26a0\ufe0f invalid"
@@ -173,13 +192,29 @@ def main(argv=None):
                     f"Score: <code>{bb.score:.0f}</code> | TP1: <code>{bb.tp1:.0f}</code> | Stop: <code>{bb.stop:.0f}</code>"
                 )
                 print(f"  [TG] Mengirim chart {r.ticker}...")
-                tg.send_photo(path, caption)
-                sent += 1
+                # dulu: sent += 1 tanpa cek hasil -> kegagalan kirim tetap
+                # dihitung "terkirim". Kini hanya saat ok, + hapus PNG bila
+                # --cleanup (paritas run_daily/run_weekly).
+                ok = tg.send_photo(path, caption)
+                if ok:
+                    sent += 1
+                    if args.cleanup:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
                 _time.sleep(1.5)
             print(f"  [TG] {sent} chart(s) terkirim ke Telegram.")
+            tg_failed_total = attempted > 0 and sent == 0
         except Exception as e:
             print(f"  [TG ERROR] {e}")
+            tg_failed_total = True
 
+    if tg_failed_total:
+        # Kegagalan kirim TOTAL tidak boleh diam-diam exit 0 (paritas
+        # run_daily/run_weekly) — scheduler mencatat FAIL di journalctl.
+        print("\n[EXIT] Telegram gagal total -> exit 3")
+        return 3
     print("\nDone.")
     return 0
 

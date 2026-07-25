@@ -172,6 +172,7 @@ def main(argv=None):
     else:
         print("[4/4] Chart di-skip (--no-charts)")
 
+    tg_failed_total = False
     if args.telegram:
         print("\n[TG] Mengirim hasil ke Telegram...")
         try:
@@ -195,11 +196,13 @@ def main(argv=None):
                 tg.send_message("<b>PRZ Daily Scan</b>\nTidak ada saham yang mendekati PRZ saat ini.")
 
             sent = 0
+            attempted = 0
             for r in results:
                 path = chart_paths.get(r.ticker)
                 if not path or not os.path.exists(path):
                     print(f"  [TG] Chart {r.ticker} tidak ada, skip.")
                     continue
+                attempted += 1
                 bb = r.best_buy
                 last_close = r.realtime_close if r.realtime_close is not None else float(r.df["Close"].iloc[-1])
                 valid_str = "\u2705 valid" if bb.valid else "\u26a0\ufe0f invalid"
@@ -235,9 +238,17 @@ def main(argv=None):
                             pass
                 _time.sleep(1.5)
             print(f"  [TG] {sent} chart(s) terkirim.")
+            tg_failed_total = attempted > 0 and sent == 0
         except Exception as e:
             print(f"  [TG ERROR] {e}")
+            tg_failed_total = True
 
+    if tg_failed_total:
+        # Kegagalan kirim TOTAL tidak boleh diam-diam exit 0 — scheduler
+        # mencatat "FAIL (exit 3)" di journalctl sehingga terlihat.
+        # (Pelajaran run_weekly yang mati senyap setiap Jumat.)
+        print("\n[EXIT] Telegram gagal total -> exit 3")
+        return 3
     print("\nDone.")
     return 0
 
