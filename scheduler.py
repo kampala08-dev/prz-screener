@@ -1,8 +1,8 @@
 ﻿"""PRZ Scanner — Python Scheduler untuk VPS.
 
-Menjalankan scan otomatis setiap hari kerja jam 18:00 WIB:
-  - Daily  : Senin-Jumat jam 18:00 WIB
-  - Weekly : Jumat jam 18:05 WIB (setelah daily selesai)
+Menjalankan scan otomatis setiap hari kerja (WIB):
+  - Daily  : Senin-Jumat jam 12:00 & 17:00 WIB (2x sehari)
+  - Weekly : Jumat jam 17:05 WIB (setelah daily selesai)
 
 Cara jalankan di VPS:
   python scheduler.py
@@ -88,8 +88,9 @@ def job_weekly():
 # ── Schedule (WIB eksplisit) ─────────────────────────────────────────────────
 # Tiap job: (hari_WIB, jam, menit, fungsi). Monday=0 .. Sunday=6.
 JOBS = [
-    ({0, 1, 2, 3, 4}, 18, 0, "Daily",  job_daily),   # Senin-Jumat 18:00 WIB
-    ({4},             18, 5, "Weekly", job_weekly),  # Jumat 18:05 WIB
+    ({0, 1, 2, 3, 4}, 12, 0, "Daily",  job_daily),   # Senin-Jumat 12:00 WIB
+    ({0, 1, 2, 3, 4}, 17, 0, "Daily",  job_daily),   # Senin-Jumat 17:00 WIB
+    ({4},             17, 5, "Weekly", job_weekly),  # Jumat 17:05 WIB
 ]
 
 # ── Main loop ────────────────────────────────────────────────────────────────
@@ -99,8 +100,8 @@ if __name__ == "__main__":
     log.info("PRZ Scheduler started.")
     log.info(f"  Sekarang   : {t0:%Y-%m-%d %H:%M:%S} WIB "
              f"({datetime.now(timezone.utc):%H:%M} UTC)")
-    log.info("  Daily  scan: Senin-Jumat 18:00 WIB")
-    log.info("  Weekly scan: Jumat       18:05 WIB")
+    log.info("  Daily  scan: Senin-Jumat 12:00 & 17:00 WIB")
+    log.info("  Weekly scan: Jumat       17:05 WIB")
     log.info(f"  Python: {PYTHON}")
     log.info("Menunggu jadwal (WIB dihitung eksplisit UTC+7)... Ctrl+C untuk stop")
 

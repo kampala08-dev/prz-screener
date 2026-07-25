@@ -9,7 +9,7 @@ Scanner Python untuk mendeteksi pola harmonic XABCD (Gartley, Bat, Butterfly, Cr
 - ✅ Multi-depth zigzag (3, 5, 8, 12, 20)
 - ✅ Output chart PNG per saham yang lolos
 - ✅ Kirim hasil ke **grup Telegram** otomatis
-- ✅ Scheduler otomatis jam **18:00 WIB** di VPS
+- ✅ Scheduler otomatis **2x sehari (12:00 & 17:00 WIB)** di VPS
 
 ---
 
@@ -76,7 +76,7 @@ didokumentasikan di `docs/PERUBAHAN_SCREENER.md` dan `output/backtest/`.
 
 ---
 
-## Setup VPS (Auto-Schedule Jam 18:00 WIB)
+## Setup VPS (Auto-Schedule 12:00 & 17:00 WIB)
 
 ### 1. Install otomatis
 
@@ -108,8 +108,8 @@ journalctl -u prz-screener -f              # pantau log realtime
 ```
 
 Jadwal otomatis (WIB dihitung eksplisit UTC+7, tak bergantung tzdata):
-- **Daily**: Senin–Jumat jam 18:00 WIB
-- **Weekly**: Jumat jam 18:05 WIB
+- **Daily**: Senin–Jumat jam **12:00 & 17:00 WIB**
+- **Weekly**: Jumat jam 17:05 WIB
 
 ### 3b. Alternatif: Cron
 
