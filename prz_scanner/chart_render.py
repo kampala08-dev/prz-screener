@@ -95,7 +95,23 @@ def render_chart(res: StockResult, *, timeframe: str, out_dir: str) -> str:
         ys = [det.xP, det.aP, det.bP, det.cP]
         lw = 1.8 if emphasize else 1.0
         alpha = 1.0 if emphasize else 0.55
-        d_mid = det.prz_mid
+        # [BOOK] Titik D digambar di ANCHOR buku (0.786/0.886/1.27/1.618
+        # XA), BUKAN tengah zona: PRZ adalah cluster confluence (anchor +
+        # AB=CD + BC) sehingga tengahnya bisa melenceng dari rasio buku —
+        # trader yang mengukur D dengan fib tool membaca rasio "salah"
+        # (mis. Bat terbaca 0.834, Gartley 0.890) padahal anchor selalu di
+        # dalam zona. Shark: zona dua-sisi 0.886-1.13 tanpa anchor tunggal
+        # -> tetap tengah zona. (Review eksternal 2026-07-26.)
+        _d_anchor_mult = {"Gartley": 0.786, "Bat": 0.886,
+                          "Butterfly": 1.27, "Crab": 1.618}.get(det.pattern)
+        _xa = abs(det.aP - det.xP)
+        if _d_anchor_mult is not None and _xa > 0:
+            d_mid = (det.aP - _d_anchor_mult * _xa if det.bull
+                     else det.aP + _d_anchor_mult * _xa)
+            k_d = _d_anchor_mult
+        else:
+            d_mid = det.prz_mid
+            k_d = abs(det.aP - d_mid) / _xa if _xa > 0 else 0.0
 
         # Shaded pattern triangles (TradingView harmonic look):
         # X-A-B and B-C-D filled translucent so the shape pops out.
@@ -134,9 +150,8 @@ def render_chart(res: StockResult, *, timeframe: str, out_dir: str) -> str:
                     fontsize=7, fontweight="bold", color=color,
                     alpha=min(1.0, alpha + 0.2))
 
-        # Leg ratio labels: B ret of XA, C ret of AB, D multiple of XA.
-        xa = abs(det.aP - det.xP)
-        k_d = abs(det.aP - d_mid) / xa if xa > 0 else 0.0
+        # Leg ratio labels: B ret of XA, C ret of AB, D = anchor buku
+        # (k_d dihitung di atas bersama posisi titik D).
         _leg_label(ax, xs[1], ys[1], xs[2], ys[2], f"{det.br:.3f}", color)
         _leg_label(ax, xs[2], ys[2], xs[3], ys[3], f"{det.cr:.3f}", color)
         _leg_label(ax, xs[3], ys[3], x_d, d_mid, f"{k_d:.3f}", color)
