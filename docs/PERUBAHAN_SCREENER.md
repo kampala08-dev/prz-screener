@@ -266,3 +266,38 @@ Test suite: 40 → **64** (scheduler 12, telegram 7, harmonic +4, backtest +1).
   ImportError senyap) + jadwal disamakan (12:00/17:00, Jumat 17:05).
 
 Test suite: 64 → **69** (sentimen +4, kontrak run_h4 +1).
+
+---
+
+## 10. Review Eksternal (Guru) — Pengetatan Gate ke Batas Buku (26 Juli 2026)
+
+Kritik guru Rio: "rasio-rasionya tidak memenuhi syarat PRZ" pada chart
+BBNI/TUGU/LPPF/RMKE/PANI. Diverifikasi dengan menghitung ulang rasio
+internal tiap deteksi (bukan dari pembacaan chart). Vonis:
+
+**Guru BENAR (3):**
+- LPPF Shark: impuls BC/AB = 2.419 > 2.24 — lolos karena pass loose
+  melebarkan gate 10% (2.464). Gate impuls kini KERAS → LPPF ditolak.
+- PANI Crab: C = 0.915 > 0.886 lolos di pass STRICT (tol 5% = 0.930);
+  PANI Bat SELL: C = 0.946 lolos loose. Rentang C 0.382-0.886 kini
+  batas KERAS di kedua pass (prinsip yang sama dgn B-point p.91).
+- Efek berantai TUGU (bug yang terungkap): level cluster 1.27·AB=CD di
+  ~1.04·XA — melewati make-or-break Gartley 1.0·XA — menyeret prz_lo
+  (1171) MENEMBUS stop (1172). Level di luar make-or-break kini
+  dikeluarkan dari cluster + zona di-clamp.
+
+**Bukan pelanggaran (2):**
+- B-point 0.542/0.645/0.526: sah menurut toleransi buku sendiri
+  (V3 p.91: ±3pp point-B, ±5pp range-B).
+- "D tidak di rasio buku": label chart lama menulis TENGAH zona cluster
+  (mis. Bat terbaca 0.834) padahal anchor buku (0.886) selalu berada di
+  dalam zona. Titik D & label kini digambar DI ANCHOR buku; Shark tetap
+  tengah zona dua-sisi.
+
+**Backtest populasi murni-buku (re-run penuh):**
+Crab+Bat conf≥2: 56.4% win, +0.133R (289 trades) vs 58.0%/+0.161R/362
+sebelum pengetatan. 73 trade pinggir-toleransi yang terbuang menang ~64%
+— pengetatan menukar sedikit expectancy historis demi kepatuhan rasio
+buku (selisih dalam noise, SE ~2.9pp). Crab justru naik (65.9%); Shark
+murni-buku makin lemah (29.4%, 68% kena SL) — konsisten: Shark bukan
+pola trigger. Test suite: 69 → 72.

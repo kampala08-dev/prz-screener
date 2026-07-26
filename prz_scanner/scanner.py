@@ -155,10 +155,14 @@ def scan_stock(ticker: str, df: pd.DataFrame, cfg: Config,
 
 
 # Backtest-proven signal subset (5y walk-forward, 362 saham; lihat
-# docs/PERUBAHAN_SCREENER.md): Crab 64.4% & Bat 53.2% win; gabungan
-# dengan confluence >=2 -> 58.0% win, +0.161R atas 362 trades (angka
-# re-run 2026-07-25 setelah dedup earliest-confirm — bias seleksi-skor
-# dihapus, edge bertahan; stabil 55-64% di 2021-2025, terlemah 2026 50.8%).
+# docs/PERUBAHAN_SCREENER.md): Crab 65.9% & Bat 51.1% win; gabungan
+# dengan confluence >=2 -> 56.4% win, +0.133R atas 289 trades (re-run
+# 2026-07-26 setelah gate KERAS rentang C & impuls Shark + eksklusi level
+# cluster di luar make-or-break — populasi murni sesuai buku; stabil
+# 52-66% di 2021-2025, terlemah 2026 50.0%). Angka pra-pengetatan:
+# 58.0%/+0.161R/362 trades — 73 trade pinggir-toleransi yang terbuang
+# menang ~64%, jadi pengetatan menukar sedikit expectancy demi kepatuhan
+# rasio buku; selisihnya di dalam noise statistik (SE ~2.9pp).
 QUALITY_PATTERNS = ("Crab", "Bat")
 QUALITY_MIN_CONF = 2
 
