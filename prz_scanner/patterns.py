@@ -454,15 +454,24 @@ def scan_points(ticker: str, points: List[ZPoint],
 
             if not two_sided:
                 # [BOOK] confluence cluster around the XA anchor.
+                # Level di luar make-or-break (level stop pola, _STOP_XA)
+                # BUKAN elemen PRZ yang sah — pola sudah batal sebelum harga
+                # mencapainya. Kasus TUGU (review eksternal 2026-07-26):
+                # 1.27*AB=CD jatuh di ~1.04*XA, melewati make-or-break
+                # Gartley 1.0*XA, dan menyeret prz_lo (1171) MENEMBUS stop
+                # (1172) — parameter trade yang inkoheren.
+                mob = aP - _STOP_XA[name] * xa if bull else aP + _STOP_XA[name] * xa
                 levels = [d_anchor]
                 for mult in _ABCD_MULTS.get(name, (1.0,)):
                     d_abcd = cP - mult * ab if bull else cP + mult * ab
-                    if _near_pct(d_abcd, d_anchor, cluster_tol):
+                    if _near_pct(d_abcd, d_anchor, cluster_tol) and \
+                            (d_abcd > mob if bull else d_abcd < mob):
                         levels.append(d_abcd)
                 bc_lvls = _BC_LEVELS[name]
                 cand = [cP - m * bc if bull else cP + m * bc for m in bc_lvls]
                 d_bc = min(cand, key=lambda v: abs(v - d_anchor))
-                if _near_pct(d_bc, d_anchor, cluster_tol):
+                if _near_pct(d_bc, d_anchor, cluster_tol) and \
+                        (d_bc > mob if bull else d_bc < mob):
                     levels.append(d_bc)
                 conf_n = len(levels)
                 if conf_n == 1:
@@ -470,6 +479,13 @@ def scan_points(ticker: str, points: List[ZPoint],
                 else:
                     pad = 0.35 * r
                     prz_hi_, prz_lo_ = max(levels) + pad, min(levels) - pad
+                # pad pun tidak boleh menyeret zona melewati make-or-break
+                # (stop selalu _STOP_BUFFER di luar mob -> stop tetap di
+                # luar zona secara ketat)
+                if bull:
+                    prz_lo_ = max(prz_lo_, mob)
+                else:
+                    prz_hi_ = min(prz_hi_, mob)
             else:
                 prz_hi_, prz_lo_ = prz_hi, prz_lo
                 bc_lvls = _BC_LEVELS[name]
@@ -502,27 +518,35 @@ def scan_points(ticker: str, points: List[ZPoint],
             _targets(det)
             dets.append(det)
 
+        # [BOOK] Rentang C 0.382-0.886 adalah elemen DEFINISI pola (spec
+        # per-pola V3), sama seperti B-point p.91: batas KERAS, tidak
+        # dilebarkan oleh pass strict/loose. Dulu tol 5-10% meloloskan
+        # C=0.915 (PANI Crab, strict) & 0.946 (PANI Bat SELL, loose) —
+        # temuan review eksternal 2026-07-26. Toleransi pass kini hanya
+        # berlaku pada gate BC-projection (ukuran turunan).
+        _C_HARD = 0.0
+
         # ---- GARTLEY [BOOK-V3 p.92]: B=0.618 +/-3pp, D=0.786 XA ----
         if pe["Gartley"] and c_retr_ok and _b_ok("Gartley", br, is_strict) and \
-                in_mm(cr, 0.382, 0.886, tol_val):
+                in_mm(cr, 0.382, 0.886, _C_HARD):
             gd = aP - 0.786 * xa if bull else aP + 0.786 * xa
             emit("Gartley", "green", gd, xa * 0.03, 0.618, 0.618, 0.786)
 
         # ---- BAT [BOOK-V3 p.98]: B=0.382-0.50 (+5pp tol), D=0.886 XA ----
         if pe["Bat"] and c_retr_ok and _b_ok("Bat", br, is_strict) and \
-                in_mm(cr, 0.382, 0.886, tol_val):
+                in_mm(cr, 0.382, 0.886, _C_HARD):
             bd = aP - 0.886 * xa if bull else aP + 0.886 * xa
             emit("Bat", "blue", bd, xa * 0.03, 0.50, 0.618, 0.886)
 
         # ---- BUTTERFLY [BOOK-V3 p.113]: B=0.786 +/-3pp, D=1.27 XA ----
         if pe["Butterfly"] and c_retr_ok and _b_ok("Butterfly", br, is_strict) \
-                and in_mm(cr, 0.382, 0.886, tol_val):
+                and in_mm(cr, 0.382, 0.886, _C_HARD):
             fd = aP - 1.27 * xa if bull else aP + 1.27 * xa
             emit("Butterfly", "purple", fd, xa * 0.04, 0.786, 0.618, 1.27)
 
         # ---- CRAB [BOOK-V3 p.104]: B=0.382-0.618 (+5pp), D=1.618 XA ----
         if pe["Crab"] and c_retr_ok and _b_ok("Crab", br, is_strict) and \
-                in_mm(cr, 0.382, 0.886, tol_val):
+                in_mm(cr, 0.382, 0.886, _C_HARD):
             cd = aP - 1.618 * xa if bull else aP + 1.618 * xa
             emit("Crab", "orange", cd, xa * 0.05, 0.618, 0.618, 1.618)
 
@@ -540,8 +564,11 @@ def scan_points(ticker: str, points: List[ZPoint],
         # pp.120/125 vs "0C" p.127). We follow the classic published spec
         # (Vol.2 / Harmonic Analyzer): 0.886-1.13 of the initial 0X leg
         # (= code XA), which V3's own "1.0 XA level" wording also supports.
+        # Rentang impuls adalah batas KERAS (dinyatakan buku tiga kali,
+        # tanpa kualifikasi toleransi) — dulu tol loose 10% meloloskan
+        # impuls 2.419 (kasus LPPF, review eksternal 2026-07-26).
         if pe["Shark"] and c_ext_ok and _b_ok("Shark", br, is_strict) and \
-                in_mm(bcp, 1.618, 2.24, tol_val):
+                in_mm(bcp, 1.618, 2.24, 0.0):
             su = aP - 0.886 * xa if bull else aP + 0.886 * xa
             sl2 = aP - 1.13 * xa if bull else aP + 1.13 * xa
             shi = max(su, sl2); slo = min(su, sl2)

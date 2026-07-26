@@ -66,10 +66,13 @@ def test_ideal_gartley_confluence():
     d = g[0]
     # anchor 0.786*XA = 1021.4 must be inside the PRZ
     assert d.prz_lo <= 1021.4 <= d.prz_hi, (d.prz_lo, d.prz_hi)
-    # [BOOK-V3] confluence: XA anchor + AB=CD (1014.6) + 1.27AB=CD (997.9)
-    # + BC 1.414 (1022.4) -> 4 clustered elements
-    assert d.conf_n == 4, f"expected 4-element confluence, got {d.conf_n}"
+    # [BOOK-V3] confluence: XA anchor + AB=CD (1014.6) + BC 1.414 (1022.4)
+    # -> 3 elemen. 1.27AB=CD (997.9) berada DI LUAR make-or-break Gartley
+    # (1.0*XA = 1000, di bawah X) sehingga BUKAN elemen PRZ yang sah dan
+    # dikeluarkan dari cluster (fix review 2026-07-26).
+    assert d.conf_n == 3, f"expected 3-element confluence, got {d.conf_n}"
     assert d.prz_lo <= 1014.6 <= d.prz_hi
+    assert d.prz_lo > d.stop, (d.prz_lo, d.stop)
     # implied CD/BC inside the book Gartley range 1.13-1.618
     assert 1.13 <= d.bc_proj <= 1.618, d.bc_proj
     # [BOOK-V3 p.92] stop just beyond 1.0 XA: A - 1.02*XA = 998
@@ -100,7 +103,10 @@ def test_crab_bc_gate_rejects_shallow_c():
     strict_bc ON; the old port's dead gate would have let it through."""
     base = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
             (1038.2, 30, False)]                     # B = 0.618 XA
-    shallow = base + [(1061.8, 40, True)]            # C = 0.382 of AB
+    # C = 0.382039 of AB (1061.81): tepat DI ATAS batas bawah buku 0.382.
+    # (1061.8 menghasilkan 0.38187 — di bawah batas keras; dulu lolos hanya
+    # karena tol 5% yang kini dihapus.)
+    shallow = base + [(1061.81, 40, True)]
     deep = base + [(1092.95, 40, True)]              # C = 0.886 of AB
     high, low, close = _flat_tail_arrays()
 
@@ -157,6 +163,63 @@ def test_shark_impulse_leg_gate():
     assert not shark_bcp(1.30), "impulse 1.30 (below 1.618) must be rejected"
     assert shark_bcp(1.80), "impulse 1.80 (in 1.618-2.24) must be detected"
     assert not shark_bcp(3.00), "impulse 3.00 (above 2.24) must be rejected"
+
+
+def test_shark_impulse_gate_is_hard_no_tolerance():
+    """Batas impuls Shark KERAS: buku menyebut 1.618-2.24 tiga kali tanpa
+    kualifikasi toleransi. Dulu pass loose (tol 10%) meloloskan sampai
+    2.464 — kasus LPPF live: impuls 2.419 terkirim sebagai sinyal."""
+    high, low, close = _flat_tail_arrays()
+
+    def shark(bcp_target, tol, strict):
+        cP = 1050.0 + bcp_target * 50.0
+        pts = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
+               (1050.0, 30, False), (cP, 40, True)]
+        dets = scan_points("TST", pts, high, low, close,
+                           tol_val=tol, is_strict=strict, cfg=_cfg())
+        return any(d.pattern == "Shark" and d.bull for d in dets)
+
+    assert not shark(2.419, 10.0, False), "kasus LPPF harus DITOLAK di loose"
+    assert not shark(2.30, 5.0, True)
+    assert shark(2.20, 10.0, False)          # dalam rentang buku -> tetap lolos
+
+
+def test_c_range_hard_book_bounds():
+    """Rentang C 0.382-0.886 = elemen definisi pola, batas KERAS di kedua
+    pass. Dulu tol 5%/10% meloloskan C=0.915 (kasus PANI Crab, pass
+    strict!) dan 0.946 (PANI Bat SELL, loose)."""
+    high, low, close = _flat_tail_arrays()
+
+    def crab_c(cr_target, tol, strict):
+        # X=1000 A=1100 B=1038.2 (0.618) C = B + cr*AB
+        cP = 1038.2 + cr_target * 61.8
+        pts = [(1101.0, 2, True), (1000.0, 10, False), (1100.0, 20, True),
+               (1038.2, 30, False), (cP, 40, True)]
+        dets = scan_points("TST", pts, high, low, close,
+                           tol_val=tol, is_strict=strict, cfg=_cfg())
+        return any(d.pattern == "Crab" and d.bull for d in dets)
+
+    assert not crab_c(0.915, 5.0, True), "C=0.915 harus ditolak (strict)"
+    assert not crab_c(0.915, 10.0, False), "C=0.915 harus ditolak (loose)"
+    assert crab_c(0.886, 5.0, True)          # tepat di batas buku -> sah
+
+
+def test_prz_cluster_never_beyond_stop():
+    """Geometri TUGU asli (X=1175 A=1330 B=1230 C=1300): level 1.27*AB=CD
+    jatuh di ~1.04*XA — melewati make-or-break Gartley 1.0*XA — dan dulu
+    menyeret prz_lo (1171) MENEMBUS stop (1172). Level di luar make-or-break
+    kini dikeluarkan dari cluster dan zona di-clamp."""
+    pts = [(1332.0, 2, True), (1175.0, 10, False), (1330.0, 20, True),
+           (1230.0, 30, False), (1300.0, 40, True)]
+    high, low, close = _flat_tail_arrays(close_val=1250.0)
+    dets = scan_points("TST", pts, high, low, close,
+                       tol_val=5.0, is_strict=True, cfg=_cfg())
+    g = [d for d in dets if d.pattern == "Gartley" and d.bull]
+    assert g, _names(dets)
+    d = g[0]
+    assert d.prz_lo > d.stop, f"zona menembus stop: prz_lo={d.prz_lo} stop={d.stop}"
+    # anchor buku tetap di dalam zona
+    assert d.prz_lo <= 1330.0 - 0.786 * 155.0 <= d.prz_hi
 
 
 def test_structure_guard_rejects_c_beyond_a_for_gartley():
